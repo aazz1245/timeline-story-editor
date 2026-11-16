@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'SilentlyContinue'
 $root = Split-Path -Parent $PSScriptRoot
 $healthUrl = 'http://127.0.0.1:4174/api/health'
+$appUrl = 'http://127.0.0.1:4174/'
 $ready = $false
 
 try {
@@ -23,7 +24,7 @@ if (-not $ready) {
 }
 
 if ($ready) {
-  Start-Process $healthUrl | Out-Null
+  Start-Process $appUrl | Out-Null
 } else {
   Write-Warning 'Timeline service did not start within 20 seconds. Run npm start to inspect the service log.'
 }
