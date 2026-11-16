@@ -173,7 +173,14 @@ try {
   await page.getByRole('button', { name: '人物基础数据档案', exact: true }).click();
   assert(await page.locator('.body-table').isVisible());
   await page.getByLabel('身高').first().fill('175');
-  await waitForArchive(archive => archive.mainCharacters?.[0]?.height === 175);
+  await page.getByLabel('上胸围').first().fill('85');
+  await page.getByLabel('下胸围').first().fill('78');
+  await page.getByRole('button', { name: '时间线', exact: true }).click();
+  const savedBaseData = await waitForArchive(archive => archive.mainCharacters?.[0]?.height === 175 && archive.mainCharacters?.[0]?.upperBust === 85 && archive.mainCharacters?.[0]?.lowerBust === 78);
+  assert.equal(savedBaseData.mainCharacters[0].upperBust, 85);
+  assert.equal(savedBaseData.mainCharacters[0].lowerBust, 78);
+  await page.getByRole('button', { name: '人物基础数据档案', exact: true }).click();
+  assert.equal(await page.locator('.body-table tbody tr').first().locator('output').textContent(), 'C');
   await page.getByRole('button', { name: '图鉴', exact: true }).click();
   assert(await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).isVisible());
   await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).getByRole('button', { name: '编辑图鉴 测试联络器' }).click();

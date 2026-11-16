@@ -44,7 +44,10 @@ watch(draft, () => {
   clearSaveTimer();
   saveTimer = setTimeout(() => { saveTimer = undefined; save(); }, 700);
 }, { deep: true });
-onBeforeUnmount(clearSaveTimer);
+onBeforeUnmount(() => {
+  if (saveTimer) save();
+  else clearSaveTimer();
+});
 </script>
 
 <template>
