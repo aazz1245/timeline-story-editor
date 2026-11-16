@@ -20,11 +20,14 @@ export async function importMarkdownFile(markdownPath: string, requestedStoryId?
   if (requestedStoryId && !selected) throw new Error(`找不到故事档案: ${requestedStoryId}`);
   const base = selected?.story || createEmptyStory();
   const result = parseMarkdown(await fs.readFile(markdownPath, 'utf8'), base);
-  const targetFile = selected?.file || `${base.storyId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
+  const safeName = result.story.storyName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').trim().slice(0, 90) || '未命名故事';
+  const archiveStamp = result.story.savedAt.replace(/[:.]/g, '-').replace(/[^\w-]/g, '');
+  const targetFile = `${safeName}_${archiveStamp}.json`;
   const target = path.join(storiesRoot, targetFile);
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
   await fs.writeFile(temporary, JSON.stringify(result.story, null, 2), 'utf8');
   await fs.rename(temporary, target);
+  if (selected?.file && selected.file !== targetFile) await fs.rm(path.join(storiesRoot, selected.file), { force: true });
   return result;
 }
 

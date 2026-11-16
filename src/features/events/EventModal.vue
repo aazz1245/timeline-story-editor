@@ -51,10 +51,10 @@ function submit() {
           <div class="field full"><label for="event-people">人物</label><input id="event-people" v-model="peopleInput" placeholder="用逗号分隔人物名称" /></div>
           <div v-if="peopleNames.length" class="field full profile-section">
             <div class="profile-section-heading"><strong>人物档案</strong><small>保存本事件中每个人物的身体与穿着数据</small></div>
-            <section v-for="person in peopleNames" :key="person" class="profile-disclosure">
-              <div class="profile-disclosure-title">{{ person }}</div>
+            <details v-for="person in peopleNames" :key="person" class="profile-disclosure">
+              <summary>{{ person }} 的身体数据</summary>
               <BodyDataForm v-model="form.peopleData[person]" :person-name="person" compact />
-            </section>
+            </details>
           </div>
           <template v-if="form.branchId === createBranchOption">
             <div class="field"><label for="branch-name">新分支名称</label><input id="branch-name" v-model="newBranchName" required /></div>

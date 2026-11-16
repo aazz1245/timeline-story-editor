@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { PhDownloadSimple, PhFileArrowUp, PhFileText, PhMagnifyingGlass, PhPlus, PhUploadSimple } from '@phosphor-icons/vue';
 import { api } from './shared/api';
 import { parseMarkdown } from './shared/domain/markdown';
@@ -32,12 +32,10 @@ const focusedStageId = ref<string | null>(null);
 const stageModal = ref(false);
 const sidebarCollapsed = ref(false);
 const settingsOpen = ref(false);
+const settingsDirectory = ref('');
 
 const sortedEvents = computed(() => story.value?.events || []);
-const currentMonth = computed(() => sortedEvents.value.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.date.slice(0, 7));
 const latestEventDate = computed(() => sortedEvents.value.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.date);
-const branchCount = computed(() => story.value?.branches.length || 0);
-const peopleCount = computed(() => story.value?.mainCharacters.length || 0);
 
 async function refreshStories(selectLatest = true) {
   stories.value = await api.stories();
@@ -49,7 +47,8 @@ async function loadStory(id: string) {
   try {
     story.value = await api.story(id);
     selectedId.value = id;
-    collapsedMonths.value = new Set(story.value.events.map(event => event.date.slice(0, 7)).filter(month => month !== currentMonth.value));
+    const latestMonth = story.value.events.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.date.slice(0, 7);
+    collapsedMonths.value = new Set(story.value.events.map(event => event.date.slice(0, 7)).filter(month => month !== latestMonth));
     const latestStage = story.value.semesters.find(stage => latestEventDate.value && latestEventDate.value >= stage.startDate && latestEventDate.value <= stage.endDate);
     collapsedStages.value = new Set(story.value.semesters.filter(stage => stage.id !== latestStage?.id).map(stage => stage.id));
     focusedStageId.value = null;
@@ -61,6 +60,11 @@ async function save(next: StoryArchive) {
   try { story.value = await api.saveStory(next); await refreshStories(false); notice.value = '已保存'; }
   catch (error) { notice.value = error instanceof Error ? error.message : '保存失败'; }
   finally { saving.value = false; setTimeout(() => { notice.value = ''; }, 2200); }
+}
+async function saveCurrentStory() {
+  if (!story.value || saving.value) return;
+  await save(story.value);
+  notice.value = '已存档';
 }
 async function createStory() {
   const name = window.prompt('新故事名称', '未命名故事');
@@ -97,11 +101,12 @@ async function saveEvent(event: TimelineEvent, branch?: import('./shared/types')
   modalEvent.value = undefined;
   await save({ ...story.value, events, branches: branch ? [...story.value.branches, branch] : story.value.branches });
 }
-async function createBranch() {
+async function deleteBranch(branchId: string) {
   if (!story.value) return;
-  const name = window.prompt('分支名称');
-  if (!name?.trim() || story.value.branches.some(branch => branch.name === name.trim())) return;
-  await save({ ...story.value, branches: [...story.value.branches, { id: `branch-${crypto.randomUUID()}`, name: name.trim(), parentEventId: null }] });
+  const branch = story.value.branches.find(item => item.id === branchId);
+  if (!branch || !window.confirm(`删除线路「${branch.name}」？线路事件会保留并回到主线。`)) return;
+  const events = story.value.events.map(event => event.branchId === branchId ? { ...event, branchId: null } : event);
+  await save({ ...story.value, events, branches: story.value.branches.filter(item => item.id !== branchId) });
 }
 function toggleMonth(month: string) {
   const next = new Set(collapsedMonths.value); next.has(month) ? next.delete(month) : next.add(month); collapsedMonths.value = next;
@@ -112,7 +117,8 @@ async function saveStages(stages: StoryArchive['semesters']) { if (!story.value)
 function exportJson() {
   if (!story.value) return;
   const blob = new Blob([JSON.stringify(story.value, null, 2)], { type: 'application/json' });
-  download(blob, `${story.value.storyName}.json`);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  download(blob, `${story.value.storyName}_${stamp}.json`);
 }
 
 function exportMarkdown() {
@@ -150,20 +156,42 @@ function download(blob: Blob, name: string) { const url = URL.createObjectURL(bl
 function exportCompendium() { download(new Blob([JSON.stringify(compendium.value, null, 2)], { type: 'application/json' }), 'compendium.json'); }
 async function importCompendium(file: File) { const data = JSON.parse(await file.text()); if (!Array.isArray(data)) return; compendium.value = data; await api.saveCompendium(data); notice.value = `已导入 ${data.length} 项图鉴`; }
 async function saveCompendium(items: CompendiumItem[]) { compendium.value = items; await api.saveCompendium(items); notice.value = '图鉴已保存'; setTimeout(() => { notice.value = ''; }, 2200); }
+async function openSettings() {
+  try { settingsDirectory.value = (await api.settings()).dataDirectory; settingsOpen.value = true; }
+  catch (error) { notice.value = error instanceof Error ? error.message : '读取本机设置失败'; }
+}
+async function changeDataDirectory(directory: string) {
+  try {
+    settingsDirectory.value = (await api.saveSettings({ dataDirectory: directory })).dataDirectory;
+    settingsOpen.value = false;
+    selectedId.value = '';
+    story.value = null;
+    await refreshStories();
+    if (stories.value[0]) await loadStory(stories.value[0].storyId);
+    notice.value = '默认存档目录已更新';
+  } catch (error) { notice.value = error instanceof Error ? error.message : '保存档案目录失败'; }
+}
 function openFile(kind: 'md' | 'json') { (kind === 'md' ? fileInput : jsonInput).value?.click(); }
 function setView(next: string) { if (['timeline', 'flow', 'people', 'compendium'].includes(next)) view.value = next as typeof view.value; }
 async function onFile(event: Event, kind: 'md' | 'json') { const file = (event.target as HTMLInputElement).files?.[0]; if (file) await (kind === 'md' ? importMarkdown(file) : importJson(file)); (event.target as HTMLInputElement).value = ''; }
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    void saveCurrentStory();
+  }
+}
 
-onMounted(async () => { try { await refreshStories(); if (stories.value[0]) await loadStory(stories.value[0].storyId); compendium.value = await api.compendium(); } catch (error) { notice.value = error instanceof Error ? error.message : '服务未启动'; } finally { loading.value = false; } });
+onMounted(async () => { window.addEventListener('keydown', handleGlobalKeydown); try { settingsDirectory.value = (await api.settings()).dataDirectory; await refreshStories(); if (stories.value[0]) await loadStory(stories.value[0].storyId); compendium.value = await api.compendium(); } catch (error) { notice.value = error instanceof Error ? error.message : '服务未启动'; } finally { loading.value = false; } });
+onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown));
 watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); });
 </script>
 
 <template>
   <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
-    <StorySidebar :stories="stories" :selected-id="selectedId" :loading="loading" :collapsed="sidebarCollapsed" @select="selectedId = $event" @create="createStory" @rename="renameStory" @remove="removeStory" @toggle="sidebarCollapsed = !sidebarCollapsed" @settings="settingsOpen = true" />
+    <StorySidebar :stories="stories" :selected-id="selectedId" :loading="loading" :collapsed="sidebarCollapsed" @select="selectedId = $event" @create="createStory" @rename="renameStory" @remove="removeStory" @toggle="sidebarCollapsed = !sidebarCollapsed" @settings="openSettings" />
     <main class="workspace">
       <header class="topbar">
-        <div><h1>{{ story?.storyName || '故事时间线' }}</h1><p>{{ story ? `${story.events.length} 个事件 · ${branchCount + 1} 条线路` : '本机故事工作区' }}</p></div>
+        <div><h1>{{ story?.storyName || '故事时间线' }}</h1><p>本机故事工作区</p></div>
         <div class="toolbar">
           <label class="btn" title="搜索事件"><PhMagnifyingGlass :size="18" aria-hidden="true" /><input v-model="query" aria-label="搜索事件" placeholder="搜索事件" style="width: 120px; border: 0; outline: 0; background: transparent;" /></label>
           <button class="btn" type="button" @click="openFile('md')"><PhUploadSimple :size="18" aria-hidden="true" /><span>导入 Markdown</span></button>
@@ -181,20 +209,14 @@ watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); 
       <div v-else-if="!story" class="content"><div class="empty-state"><strong>本机还没有故事档案</strong><div>新建故事，或从旧版 JSON 档案开始。</div><div class="toolbar" style="justify-content:center; margin-top:16px;"><button class="btn primary" type="button" @click="createStory"><PhPlus :size="17" aria-hidden="true" />新建故事</button><button class="btn" type="button" @click="openFile('json')"><PhFileArrowUp :size="17" aria-hidden="true" />导入旧版 JSON</button></div></div></div>
       <div v-else class="content">
         <nav class="view-tabs" aria-label="工作区视图"><button v-for="tab in [{ id: 'timeline', label: '时间线' }, { id: 'flow', label: '时间流' }, { id: 'people', label: '人物身体数据' }, { id: 'compendium', label: '图鉴' }]" :key="tab.id" class="view-tab" :class="{ active: view === tab.id }" type="button" :aria-current="view === tab.id ? 'page' : undefined" @click="setView(tab.id)">{{ tab.label }}</button></nav>
-        <section v-if="view === 'timeline'" class="summary-strip" aria-label="故事概览">
-          <div class="summary-card"><span>事件</span><strong>{{ story.events.length }}</strong></div>
-          <div class="summary-card"><span>线路</span><strong>{{ branchCount + 1 }}</strong></div>
-          <div class="summary-card"><span>人物</span><strong>{{ peopleCount }}</strong></div>
-          <div class="summary-card"><span>最新月份</span><strong>{{ currentMonth || '—' }}</strong></div>
-        </section>
         <TimelineBoard v-if="view === 'timeline'" :events="sortedEvents" :branches="story.branches" :stages="story.semesters" :collapsed-months="collapsedMonths" :collapsed-stages="collapsedStages" :focused-stage-id="focusedStageId" :query="query" @toggle-month="toggleMonth" @toggle-stage="toggleStage" @focus-stage="focusStage" @edit="modalEvent = $event" @delete="deleteEvent" @select="modalEvent = $event" @export="exportEvent" />
-        <TimelineFlowBoard v-else-if="view === 'flow'" :events="story.events" :branches="story.branches" :stages="story.semesters" @select="modalEvent = $event" @edit="modalEvent = $event" @export="exportEvent" />
+        <TimelineFlowBoard v-else-if="view === 'flow'" :events="story.events" :branches="story.branches" :stages="story.semesters" @select="modalEvent = $event" @edit="modalEvent = $event" @export="exportEvent" @delete-branch="deleteBranch" />
         <PeopleBoard v-else-if="view === 'people'" :story="story" @save="save" />
         <CompendiumBoard v-else :items="compendium" @import="importCompendium" @export="exportCompendium" @save="saveCompendium" />
       </div>
     </main>
     <EventModal v-if="modalEvent !== undefined" :event="modalEvent" :branches="story?.branches || []" :events="story?.events || []" @close="modalEvent = undefined" @save="saveEvent" />
     <StageSettingsModal v-if="stageModal" :stages="story?.semesters || []" @close="stageModal = false" @save="saveStages" />
-    <LocalSettingsModal v-if="settingsOpen" data-directory="本机 data/stories 与 data/compendium.json" @close="settingsOpen = false" @refresh="refreshStories(); story && loadStory(story.storyId)" />
+    <LocalSettingsModal v-if="settingsOpen" :data-directory="settingsDirectory" @close="settingsOpen = false" @refresh="refreshStories(); story && loadStory(story.storyId)" @save="changeDataDirectory" />
   </div>
 </template>

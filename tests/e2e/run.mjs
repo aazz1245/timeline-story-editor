@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'timeline-e2e-'));
-const storiesDir = path.join(dataDir, 'stories');
+let storiesDir = path.join(dataDir, 'stories');
+let compendiumPath = path.join(dataDir, 'compendium.json');
 await fs.mkdir(storiesDir, { recursive: true });
 const story = {
   storyId: 'e2e-story', storyName: '验收故事',
@@ -28,7 +29,7 @@ const story = {
   semesterGroups: [{ id: 'acts', name: '故事阶段', periods: ['act-one', 'act-two'] }], savedAt: new Date().toISOString(),
 };
 await fs.writeFile(path.join(storiesDir, 'e2e-story.json'), JSON.stringify(story, null, 2));
-await fs.writeFile(path.join(dataDir, 'compendium.json'), JSON.stringify([{ id: 'device', name: '测试联络器', category: '道具', details: '用于验证本机图鉴。' }]));
+await fs.writeFile(compendiumPath, JSON.stringify([{ id: 'device', name: '测试联络器', category: '道具', details: '用于验证本机图鉴。' }]));
 
 async function apiStories(baseUrl) {
   const response = await fetch(`${baseUrl}/api/stories`);
@@ -36,13 +37,26 @@ async function apiStories(baseUrl) {
   return response.json();
 }
 
-async function waitForArchive(filePath, predicate) {
+async function readArchive() {
+  let files;
+  try { files = await fs.readdir(storiesDir); } catch { throw new Error('Archive not found'); }
+  for (const file of files) {
+    if (!file.endsWith('.json')) continue;
+    const archive = JSON.parse(await fs.readFile(path.join(storiesDir, file), 'utf8'));
+    if (archive.storyId === 'e2e-story') return archive;
+  }
+  throw new Error('Archive not found');
+}
+
+async function waitForArchive(predicate) {
   for (let attempt = 0; attempt < 40; attempt++) {
-    const archive = JSON.parse(await fs.readFile(filePath, 'utf8'));
-    if (predicate(archive)) return archive;
+    try {
+      const archive = await readArchive();
+      if (predicate(archive)) return archive;
+    } catch { /* destination directory may still be initializing */ }
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  throw new Error(`Archive update timed out: ${path.basename(filePath)}`);
+  throw new Error('Archive update timed out');
 }
 
 const portProbe = net.createServer();
@@ -78,13 +92,21 @@ try {
   assert(await page.locator('.app-shell').evaluate(element => element.classList.contains('sidebar-collapsed')));
   await page.getByRole('button', { name: '展开侧边栏' }).click();
   await page.getByRole('button', { name: '本机设置' }).click();
+  await page.getByRole('dialog', { name: '本机设置' }).waitFor();
   assert(await page.getByRole('dialog', { name: '本机设置' }).isVisible());
-  await page.getByRole('dialog', { name: '本机设置' }).getByText('关闭', { exact: true }).click();
+  const movedDataDir = path.join(dataDir, 'archive-target');
+  storiesDir = path.join(movedDataDir, 'stories');
+  compendiumPath = path.join(movedDataDir, 'compendium.json');
+  await page.getByLabel('默认存档文件夹').fill(movedDataDir);
+  await page.getByRole('button', { name: '保存目录' }).click();
+  await page.getByRole('button', { name: '时间线', exact: true }).waitFor();
+  assert.equal((await waitForArchive(archive => archive.storyName === '验收故事')).storyName, '验收故事');
   assert.equal(await page.locator('.event-card').count(), 2);
   assert.equal(await page.locator('.stage-summary').count(), 1);
   const may = page.locator('.month-section').filter({ hasText: '2030年05月' });
   assert.equal(await may.locator('.month-header').getAttribute('aria-expanded'), 'true');
   assert.deepEqual(await may.locator('.event-title').allTextContents(), ['测试支线结尾', '同日后续']);
+  assert((await may.locator('.event-card').filter({ hasText: '测试支线结尾' }).evaluate(element => parseFloat(getComputedStyle(element).marginLeft))) > 0);
   const eventCard = may.locator('.event-card').filter({ hasText: '测试支线结尾' });
   await eventCard.getByRole('button', { name: '展开 测试支线结尾 详情' }).click();
   assert(await eventCard.locator('.event-detail').isVisible());
@@ -99,8 +121,7 @@ try {
   await newStage.nth(1).fill('2030/06/01');
   await newStage.nth(2).fill('2030/06/30');
   await page.getByRole('button', { name: '保存阶段' }).click();
-  const archivePath = path.join(dataDir, 'stories', 'e2e-story.json');
-  assert.equal((await waitForArchive(archivePath, archive => archive.semesters.length === 3)).semesters.length, 3);
+  assert.equal((await waitForArchive(archive => archive.semesters.length === 3)).semesters.length, 3);
 
   await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).click();
   assert.equal(await page.locator('.stage-summary').count(), 0);
@@ -118,10 +139,15 @@ try {
   await page.locator('#branch-parent').selectOption('e2');
   await page.locator('#event-summary').fill('由浏览器验收创建');
   await page.locator('#event-people').fill('人物丙');
+  await page.locator('.profile-disclosure').first().locator('summary').click();
   await page.locator('.body-data-form input:not([type="checkbox"])').first().evaluate(element => { const input = element; input.value = '测试内衣'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+  const npcToggle = page.locator('.profile-disclosure').first().getByRole('checkbox');
+  await npcToggle.check();
+  assert.equal(await page.locator('.profile-disclosure').first().locator('input:not([type="checkbox"])').first().isDisabled(), true);
+  await npcToggle.uncheck();
   await page.getByRole('button', { name: '保存事件' }).click();
   await page.getByRole('heading', { name: '新增分支事件' }).waitFor();
-  const saved = await waitForArchive(archivePath, archive => archive.events.length === 5);
+  const saved = await waitForArchive(archive => archive.events.length === 5);
   assert.equal(saved.events.length, 5);
   assert.equal(saved.branches.length, 2);
   const newBranch = saved.branches.find(branch => branch.name === '南线');
@@ -132,6 +158,10 @@ try {
   await page.getByRole('button', { name: '时间流', exact: true }).click();
   assert(await page.locator('.flow-board').isVisible());
   assert(await page.locator('.flow-line').count() >= 2);
+  assert.equal(await page.locator('.flow-stage-chip[aria-expanded="true"]').count(), 1);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '删除线路 北线' }).click();
+  await waitForArchive(archive => archive.branches.length === 1 && archive.branches[0].name === '南线');
   await page.getByRole('button', { name: '人物身体数据', exact: true }).click();
   assert(await page.locator('.body-table').isVisible());
   await page.getByRole('button', { name: '图鉴', exact: true }).click();
@@ -141,7 +171,7 @@ try {
   await page.getByRole('button', { name: '保存条目' }).click();
   let compendiumArchive;
   for (let attempt = 0; attempt < 40; attempt++) {
-    compendiumArchive = JSON.parse(await fs.readFile(path.join(dataDir, 'compendium.json'), 'utf8'));
+    compendiumArchive = JSON.parse(await fs.readFile(compendiumPath, 'utf8'));
     if (compendiumArchive[0]?.details === '已修改图鉴内容') break;
     await new Promise(resolve => setTimeout(resolve, 50));
   }
@@ -150,8 +180,11 @@ try {
   await page.getByRole('button', { name: '时间线', exact: true }).click();
   const markdown = '### 2030/05/03 下午 - Markdown 导入事件\n**线路**: 分支:南线\n**地点**: 港口\n**人物**: 人物乙\n\n> Markdown 摘要\n\nMarkdown 正文';
   await page.locator('input[type=file][accept*="markdown"]').setInputFiles({ name: 'import.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown) });
-  const imported = await waitForArchive(archivePath, archive => archive.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
+  const imported = await waitForArchive(archive => archive.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
   assert(imported.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
+  await page.keyboard.press('Control+S');
+  await waitForArchive(archive => archive.savedAt);
+  assert((await fs.readdir(storiesDir)).some(file => file.startsWith('验收故事_') && file.endsWith('.json')));
 
   const eventDownloadPromise = page.waitForEvent('download');
   await page.locator('.event-card').filter({ hasText: '测试起点' }).getByRole('button', { name: '导出 测试起点' }).click();

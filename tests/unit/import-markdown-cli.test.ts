@@ -26,8 +26,10 @@ describe('Markdown CLI archive selection', () => {
     expect(defaultResult.story.events[0].title).toBe('CLI 导入');
     const explicitResult = await importMarkdownFile(markdown, 'older', root);
     expect(explicitResult.story.storyId).toBe('older');
-    expect(JSON.parse(await fs.readFile(path.join(stories, 'a-older.json'), 'utf8')).events).toHaveLength(1);
-    expect(JSON.parse(await fs.readFile(path.join(stories, 'z-newer.json'), 'utf8')).events).toHaveLength(1);
+    const archives = await Promise.all((await fs.readdir(stories)).filter(file => file.endsWith('.json')).map(async file => JSON.parse(await fs.readFile(path.join(stories, file), 'utf8'))));
+    expect(archives.find(story => story.storyId === 'older').events).toHaveLength(1);
+    expect(archives.find(story => story.storyId === 'newer').events).toHaveLength(1);
+    expect((await fs.readdir(stories)).some(file => file.startsWith('旧故事_'))).toBe(true);
   });
 
   it('rejects an unknown story ID without creating or changing an archive', async () => {

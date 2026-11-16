@@ -1,5 +1,7 @@
 import type { CompendiumItem, StoryArchive, StorySummary } from './types';
 
+export interface LocalSettings { dataDirectory: string; }
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...init });
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.message || `请求失败 (${response.status})`);
@@ -7,6 +9,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  settings: () => request<LocalSettings>('/api/settings'),
+  saveSettings: (settings: LocalSettings) => request<LocalSettings>('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
   stories: () => request<StorySummary[]>('/api/stories'),
   story: (id: string) => request<StoryArchive>(`/api/stories/${encodeURIComponent(id)}`),
   createStory: (storyName: string) => request<StoryArchive>('/api/stories', { method: 'POST', body: JSON.stringify({ storyName }) }),

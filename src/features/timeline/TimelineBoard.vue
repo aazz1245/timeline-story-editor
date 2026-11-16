@@ -8,6 +8,21 @@ const emit = defineEmits<{ edit: [event: TimelineEvent]; delete: [event: Timelin
 const expandedEvents = ref(new Set<string>());
 
 const branchMap = computed(() => new Map(props.branches.map(branch => [branch.id, branch.name])));
+const branchDepth = computed(() => {
+  const depths = new Map<string, number>();
+  const resolve = (id: string, seen = new Set<string>()): number => {
+    if (depths.has(id)) return depths.get(id)!;
+    if (seen.has(id)) return 1;
+    seen.add(id);
+    const branch = props.branches.find(item => item.id === id);
+    const parent = branch?.parentEventId == null ? 0 : 1;
+    const depth = parent + (branch?.parentEventId != null ? 0 : 0);
+    depths.set(id, depth);
+    return depth;
+  };
+  props.branches.forEach(branch => resolve(branch.id));
+  return depths;
+});
 const stageCounts = computed(() => new Map(props.stages.map(stage => [stage.id, props.events.filter(event => inStage(event, stage)).length])));
 const stageName = (id: string) => props.stages.find(stage => stage.id === id)?.name || '';
 const inStage = (event: TimelineEvent, stage: StoryPeriod) => event.date >= stage.startDate && event.date <= stage.endDate;
@@ -28,6 +43,7 @@ const months = computed(() => {
 });
 const monthLabel = (month: string) => month === '未知月份' ? month : `${month.slice(0, 4)}年${month.slice(5, 7)}月`;
 const branchName = (id: string | null) => id ? branchMap.value.get(id) || '未知分支' : '主线';
+const eventIndent = (event: TimelineEvent) => event.branchId ? Math.max(1, branchDepth.value.get(event.branchId) || 1) : 0;
 function toggleDetails(event: TimelineEvent) {
   const id = String(event.id);
   const next = new Set(expandedEvents.value);
@@ -58,7 +74,7 @@ function toggleDetails(event: TimelineEvent) {
         <div v-if="!collapsedMonths.has(month)" class="month-expand">
           <div class="month-expand-inner">
             <div class="month-events">
-              <article v-for="event in monthEvents" :key="String(event.id)" class="event-card" :class="{ 'details-open': expandedEvents.has(String(event.id)) }">
+              <article v-for="event in monthEvents" :key="String(event.id)" class="event-card" :class="{ 'details-open': expandedEvents.has(String(event.id)), 'is-nested': eventIndent(event) > 0 }" :style="{ '--event-indent': `${eventIndent(event) * 28}px` }">
                 <div class="event-date"><strong>{{ event.date }}</strong><br>{{ event.time || '时间未注明' }}</div>
                 <button class="event-main" type="button" @click="emit('select', event)">
                   <h3 class="event-title">{{ event.title }}</h3>
