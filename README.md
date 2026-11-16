@@ -15,6 +15,8 @@ npm run dev
 
 打开 Vite 显示的本机地址。API 服务只监听 `127.0.0.1`。
 
+Windows 桌面快捷方式会启动生产服务并自动打开 `http://127.0.0.1:4174`。快捷方式调用 `scripts/start-timeline.ps1`；也可以直接运行 `npm start`。
+
 ## 构建与运行
 
 ```powershell

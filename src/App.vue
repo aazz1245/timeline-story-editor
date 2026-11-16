@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import { PhDownloadSimple, PhFileArrowUp, PhFileText, PhMagnifyingGlass, PhPlus, PhUploadSimple } from '@phosphor-icons/vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { PhDownloadSimple, PhFileArrowUp, PhFileText, PhMagnifyingGlass, PhPlus, PhUploadSimple, PhCommand } from '@phosphor-icons/vue';
 import { api } from './shared/api';
 import { parseMarkdown } from './shared/domain/markdown';
 import { createEmptyStory, normalizeStory } from './shared/domain/normalize';
@@ -12,6 +12,7 @@ import BranchBoard from './features/branches/BranchBoard.vue';
 import PeopleBoard from './features/people/PeopleBoard.vue';
 import CompendiumBoard from './features/compendium/CompendiumBoard.vue';
 import StageSettingsModal from './features/timeline/StageSettingsModal.vue';
+import ShortcutPanel from './shared/components/ShortcutPanel.vue';
 
 const stories = ref<StorySummary[]>([]);
 const selectedId = ref('');
@@ -29,6 +30,8 @@ const compendium = ref<CompendiumItem[]>([]);
 const collapsedStages = ref<Set<string>>(new Set());
 const focusedStageId = ref<string | null>(null);
 const stageModal = ref(false);
+const shortcutOpen = ref(false);
+const searchInput = ref<HTMLInputElement>();
 
 const sortedEvents = computed(() => story.value?.events || []);
 const currentMonth = computed(() => sortedEvents.value.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.date.slice(0, 7));
@@ -135,10 +138,37 @@ function download(blob: Blob, name: string) { const url = URL.createObjectURL(bl
 function exportCompendium() { download(new Blob([JSON.stringify(compendium.value, null, 2)], { type: 'application/json' }), 'compendium.json'); }
 async function importCompendium(file: File) { const data = JSON.parse(await file.text()); if (!Array.isArray(data)) return; compendium.value = data; await api.saveCompendium(data); notice.value = `已导入 ${data.length} 项图鉴`; }
 function openFile(kind: 'md' | 'json') { (kind === 'md' ? fileInput : jsonInput).value?.click(); }
+function openShortcuts() { shortcutOpen.value = true; }
+function focusSearch() { shortcutOpen.value = false; view.value = 'timeline'; requestAnimationFrame(() => searchInput.value?.focus()); }
+function runShortcut(action: 'newEvent' | 'search' | 'importMarkdown' | 'importJson' | 'exportMarkdown' | 'exportJson' | 'stageSettings') {
+  shortcutOpen.value = false;
+  if (action === 'newEvent') modalEvent.value = null;
+  if (action === 'search') focusSearch();
+  if (action === 'importMarkdown') openFile('md');
+  if (action === 'importJson') openFile('json');
+  if (action === 'exportMarkdown') exportMarkdown();
+  if (action === 'exportJson') exportJson();
+  if (action === 'stageSettings' && view.value === 'timeline') stageModal.value = true;
+}
 function setView(next: string) { if (['timeline', 'branches', 'people', 'compendium'].includes(next)) view.value = next as typeof view.value; }
 async function onFile(event: Event, kind: 'md' | 'json') { const file = (event.target as HTMLInputElement).files?.[0]; if (file) await (kind === 'md' ? importMarkdown(file) : importJson(file)); (event.target as HTMLInputElement).value = ''; }
+function handleGlobalKeydown(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null;
+  const typing = target?.matches('input, textarea, select, [contenteditable="true"]');
+  const modKey = event.ctrlKey || event.metaKey;
+  if (event.key === '?' && !typing) { event.preventDefault(); openShortcuts(); return; }
+  if (event.key === 'Escape' && shortcutOpen.value) { event.preventDefault(); shortcutOpen.value = false; return; }
+  if (event.key.toLowerCase() === 'n' && !typing && !modKey) { event.preventDefault(); modalEvent.value = null; return; }
+  if (modKey && event.key.toLowerCase() === 'k') { event.preventDefault(); focusSearch(); return; }
+  if (modKey && event.shiftKey && event.key.toLowerCase() === 'm') { event.preventDefault(); openFile('md'); return; }
+  if (modKey && event.shiftKey && event.key.toLowerCase() === 'j') { event.preventDefault(); openFile('json'); return; }
+  if (modKey && event.altKey && event.key.toLowerCase() === 'm') { event.preventDefault(); exportMarkdown(); return; }
+  if (modKey && event.altKey && event.key.toLowerCase() === 'j') { event.preventDefault(); exportJson(); return; }
+  if (modKey && event.shiftKey && event.key.toLowerCase() === 's' && view.value === 'timeline') { event.preventDefault(); stageModal.value = true; }
+}
 
-onMounted(async () => { try { await refreshStories(); if (stories.value[0]) await loadStory(stories.value[0].storyId); compendium.value = await api.compendium(); } catch (error) { notice.value = error instanceof Error ? error.message : '服务未启动'; } finally { loading.value = false; } });
+onMounted(async () => { window.addEventListener('keydown', handleGlobalKeydown); try { await refreshStories(); if (stories.value[0]) await loadStory(stories.value[0].storyId); compendium.value = await api.compendium(); } catch (error) { notice.value = error instanceof Error ? error.message : '服务未启动'; } finally { loading.value = false; } });
+onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown));
 watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); });
 </script>
 
@@ -149,12 +179,13 @@ watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); 
       <header class="topbar">
         <div><h1>{{ story?.storyName || '故事时间线' }}</h1><p>{{ story ? `${story.events.length} 个事件 · ${branchCount} 条分支` : '本机故事工作区' }}</p></div>
         <div class="toolbar">
-          <label class="btn" title="搜索事件"><PhMagnifyingGlass :size="18" aria-hidden="true" /><input v-model="query" aria-label="搜索事件" placeholder="搜索事件" style="width: 120px; border: 0; outline: 0; background: transparent;" /></label>
+          <label class="btn" title="搜索事件"><PhMagnifyingGlass :size="18" aria-hidden="true" /><input ref="searchInput" v-model="query" aria-label="搜索事件" placeholder="搜索事件" style="width: 120px; border: 0; outline: 0; background: transparent;" /></label>
           <button class="btn" type="button" @click="openFile('md')"><PhUploadSimple :size="18" aria-hidden="true" /><span>导入 Markdown</span></button>
           <button class="btn" type="button" @click="openFile('json')"><PhFileArrowUp :size="18" aria-hidden="true" /><span>加载 JSON</span></button>
           <button class="btn" type="button" :disabled="!story" @click="exportMarkdown"><PhFileText :size="18" aria-hidden="true" /><span>导出 Markdown</span></button>
           <button class="btn" type="button" @click="exportJson"><PhDownloadSimple :size="18" aria-hidden="true" /><span>导出 JSON</span></button>
           <button v-if="view === 'timeline'" class="btn" type="button" @click="stageModal = true"><span>阶段设置</span></button>
+          <button class="btn shortcut-trigger" type="button" aria-haspopup="dialog" aria-controls="shortcut-panel" @click="openShortcuts"><PhCommand :size="18" aria-hidden="true" /><span>快捷操作</span><kbd>?</kbd></button>
           <button class="btn primary" type="button" @click="modalEvent = null"><PhPlus :size="18" aria-hidden="true" /><span>新建事件</span></button>
           <input ref="fileInput" type="file" accept=".md,.markdown,text/markdown" hidden @change="onFile($event, 'md')" />
           <input ref="jsonInput" type="file" accept=".json,application/json" hidden @change="onFile($event, 'json')" />
@@ -179,5 +210,6 @@ watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); 
     </main>
     <EventModal v-if="modalEvent !== undefined" :event="modalEvent" :branches="story?.branches || []" :events="story?.events || []" @close="modalEvent = undefined" @save="saveEvent" />
     <StageSettingsModal v-if="stageModal" :stages="story?.semesters || []" @close="stageModal = false" @save="saveStages" />
+    <ShortcutPanel :open="shortcutOpen" @close="shortcutOpen = false" @new-event="runShortcut('newEvent')" @search="runShortcut('search')" @import-markdown="runShortcut('importMarkdown')" @import-json="runShortcut('importJson')" @export-markdown="runShortcut('exportMarkdown')" @export-json="runShortcut('exportJson')" @stage-settings="runShortcut('stageSettings')" />
   </div>
 </template>

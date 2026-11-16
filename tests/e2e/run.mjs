@@ -74,6 +74,16 @@ try {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.waitForSelector('.app-shell');
   assert(await page.locator('.sidebar').isVisible());
+  await page.getByRole('button', { name: /快捷操作/ }).click();
+  assert(await page.getByRole('dialog', { name: '快捷操作' }).isVisible());
+  const searchShortcut = page.locator('.shortcut-row').filter({ hasText: '搜索事件' });
+  assert.equal(await searchShortcut.count(), 1);
+  await searchShortcut.click();
+  assert.equal(await page.locator('input[aria-label="搜索事件"]').evaluate(element => document.activeElement === element), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByRole('dialog', { name: '快捷操作' }).count(), 0);
+  await page.keyboard.press('Control+K');
+  assert.equal(await page.locator('input[aria-label="搜索事件"]').evaluate(element => document.activeElement === element), true);
   assert.equal(await page.locator('.event-card').count(), 2);
   assert.equal(await page.locator('.stage-summary').count(), 1);
   const may = page.locator('.month-section').filter({ hasText: '2030年05月' });
