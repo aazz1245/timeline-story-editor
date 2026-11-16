@@ -25,5 +25,5 @@ if (-not $ready) {
 if ($ready) {
   Start-Process $healthUrl | Out-Null
 } else {
-  Write-Warning '故事时间线服务未能在 20 秒内启动。请运行 npm start 查看服务日志。'
+  Write-Warning 'Timeline service did not start within 20 seconds. Run npm start to inspect the service log.'
 }
