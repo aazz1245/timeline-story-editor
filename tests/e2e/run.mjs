@@ -127,6 +127,8 @@ try {
   assert.equal(await page.locator('.stage-summary').count(), 2);
   assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).getAttribute('aria-expanded'), 'true');
   assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第二阶段' }).getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(await page.locator('.stage-heading-title').allTextContents(), ['第一阶段']);
+  assert.equal(await page.getByRole('button', { name: '收起阶段 第一阶段' }).count(), 1);
   const march = page.locator('.month-section').filter({ hasText: '2030年03月' });
   assert.equal(await march.locator('.month-header').getAttribute('aria-expanded'), 'true');
   assert.equal(await march.locator('.event-card').count(), 2);

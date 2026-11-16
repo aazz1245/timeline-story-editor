@@ -79,6 +79,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .month-expand-inner { min-height: 0; overflow: hidden; }
 .month-events::before { position: absolute; z-index: 0; top: 4px; bottom: 18px; left: 150px; width: 1px; background: color-mix(in srgb, var(--text-tertiary) 32%, transparent); content: ""; }
 .month-events.collapsed { display: none; }
+.stage-section { display: grid; gap: 12px; }
+.stage-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 5px 4px 2px; border-bottom: 1px solid var(--border); }
+.stage-heading-title { margin: 4px 0 0; font-size: 21px; letter-spacing: -.03em; }
+.stage-heading p { margin: 4px 0 8px; color: var(--text-secondary); font-size: 12px; }
 .stage-tools { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .stage-toggle, .stage-focus { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-solid); color: var(--text-secondary); }
 .stage-toggle:hover, .stage-focus:hover, .stage-focus[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent); }
