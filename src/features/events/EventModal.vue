@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import type { TimelineBranch, TimelineEvent } from '../../shared/types';
-import { createDefaultBodyData } from '../../shared/domain/normalize';
+import type { TimelineBranch, TimelineEvent, TimelinePerson } from '../../shared/types';
+import { calculateCup, createDefaultBodyData } from '../../shared/domain/normalize';
 import ModalShell from '../../shared/components/ModalShell.vue';
 import BodyDataForm from '../../shared/components/BodyDataForm.vue';
 
-const props = defineProps<{ event: TimelineEvent | null; branches: TimelineBranch[]; events: TimelineEvent[] }>();
+const props = defineProps<{ event: TimelineEvent | null; branches: TimelineBranch[]; events: TimelineEvent[]; mainCharacters: TimelinePerson[] }>();
 const emit = defineEmits<{ close: []; save: [event: TimelineEvent, branch?: TimelineBranch] }>();
 const form = reactive<TimelineEvent>({ id: '', title: '', date: '', time: '上午', location: '', summary: '', content: '', people: [], peopleData: {}, order: 0, branchId: null });
 const createBranchOption = '__create_branch__';
@@ -17,6 +17,7 @@ function profileFor(name: string) {
   if (!form.peopleData[name]) form.peopleData[name] = createDefaultBodyData();
   return form.peopleData[name];
 }
+function basePersonFor(name: string) { return props.mainCharacters.find(person => person.name === name); }
 watch(() => props.event, event => {
   Object.assign(form, event ? JSON.parse(JSON.stringify(event)) : { id: crypto.randomUUID(), title: '', date: new Date().toISOString().slice(0, 10).replaceAll('-', '/'), time: '上午', location: '', summary: '', content: '', people: [], peopleData: {}, order: 0, branchId: null });
   peopleInput.value = (event?.people || []).join(', ');
@@ -33,7 +34,11 @@ function submit() {
     branchId = branch.id;
   }
   const people = [...peopleNames.value];
-  const peopleData = Object.fromEntries(people.map(name => [name, profileFor(name)]));
+  const peopleData = Object.fromEntries(people.map(name => {
+    const profile = profileFor(name);
+    const basePerson = basePersonFor(name);
+    return [name, { ...profile, cup: basePerson ? calculateCup(basePerson.upperBust, basePerson.lowerBust) : profile.cup }];
+  }));
   emit('save', { ...form, branchId, people, peopleData, date: form.date.replaceAll('-', '/'), title: form.title.trim(), summary: form.summary.trim() }, branch);
 }
 </script>
@@ -50,10 +55,10 @@ function submit() {
           <div class="field full"><label for="event-summary">摘要</label><input id="event-summary" v-model="form.summary" /></div>
           <div class="field full"><label for="event-people">人物</label><input id="event-people" v-model="peopleInput" placeholder="用逗号分隔人物名称" /></div>
           <div v-if="peopleNames.length" class="field full profile-section">
-            <div class="profile-section-heading"><strong>人物档案</strong><small>保存本事件中每个人物的身体与穿着数据</small></div>
+            <div class="profile-section-heading"><strong>人物档案</strong><small>保存本事件中每个人物的基础与穿着数据</small></div>
             <details v-for="person in peopleNames" :key="person" class="profile-disclosure">
-              <summary>{{ person }} 的身体数据</summary>
-              <BodyDataForm v-model="form.peopleData[person]" :person-name="person" compact />
+              <summary>{{ person }} 的基础数据档案</summary>
+              <BodyDataForm v-model="form.peopleData[person]" :person-name="person" :base-person="basePersonFor(person)" compact />
             </details>
           </div>
           <template v-if="form.branchId === createBranchOption">

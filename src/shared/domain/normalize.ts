@@ -1,4 +1,4 @@
-import type { StoryArchive, TimelineBodyData, TimelineBranch, TimelineEvent } from '../types';
+import type { StoryArchive, TimelineBodyData, TimelineBranch, TimelineEvent, TimelinePerson } from '../types';
 
 const emptyStory = (storyName = '未命名故事', storyId: string = crypto.randomUUID()): StoryArchive => ({
   storyId,
@@ -18,11 +18,19 @@ export function normalizeStory(input: unknown): StoryArchive {
   const events = Array.isArray(value.events) ? value.events.map((raw, index) => normalizeEvent(raw, index)) : [];
   const branches = Array.isArray(value.branches) ? value.branches.map(normalizeBranch).filter((branch): branch is TimelineBranch => !!branch) : [];
   const people = Array.isArray(value.mainCharacters) ? value.mainCharacters.filter(isRecord) : [];
+  const mainCharacters: TimelinePerson[] = people.map(person => ({ ...person, name: String(person.name ?? '未命名人物') }));
+  const eventsWithCalculatedCups = events.map(event => ({
+    ...event,
+    peopleData: Object.fromEntries(Object.entries(event.peopleData).map(([name, data]) => {
+      const person = mainCharacters.find(item => item.name === name);
+      return [name, person ? { ...data, cup: calculateCup(Number(person.upperBust), Number(person.lowerBust)) } : data];
+    })),
+  }));
   return {
     ...emptyStory(String(value.storyName ?? value.name ?? '未命名故事'), storyId),
-    events,
+    events: eventsWithCalculatedCups,
     branches,
-    mainCharacters: people.map(person => ({ ...person, name: String(person.name ?? '未命名人物') })),
+    mainCharacters,
     semesters: Array.isArray(value.semesters) ? value.semesters.filter(isRecord).map(stage => ({
       id: String(stage.id), name: String(stage.name ?? ''),
       startDate: normalizeDate(String(stage.startDate ?? '')),
@@ -39,6 +47,13 @@ export function normalizeStory(input: unknown): StoryArchive {
 
 export function createEmptyStory(name = '未命名故事'): StoryArchive {
   return emptyStory(name);
+}
+
+export function calculateCup(upperBust: number | null | undefined, lowerBust: number | null | undefined): string {
+  const diff = Number(upperBust || 0) - Number(lowerBust || 0);
+  if (diff <= 0) return '—';
+  const letters = ['AA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+  return letters[Math.min(letters.length - 1, Math.max(0, Math.round(diff / 2.5)))];
 }
 
 export function normalizeDate(value: string): string {
@@ -85,7 +100,7 @@ export function createDefaultBodyData(isNPC = false): TimelineBodyData {
     cage: '无',
     specialAccessories: [],
     bustSize: 80,
-    cup: 'A',
+    cup: calculateCup(80, 68),
     penisState: '未勃起',
     penisLength: 8,
   };

@@ -21,7 +21,7 @@ const story = {
     { id: 'e4', title: '同日后续', date: '2030/05/01', time: '深夜', location: '测试站', summary: '同日第二事件', content: '第二段正文', people: ['人物甲'], peopleData: {}, order: 4, branchId: null },
   ],
   branches: [{ id: 'north', name: '北线', parentEventId: 'e2', themeColor: '#0891b2' }],
-  mainCharacters: [{ name: '人物甲', notes: '验收人物' }],
+  mainCharacters: [{ name: '人物甲', notes: '验收人物', upperBust: 90, lowerBust: 82 }],
   semesters: [
     { id: 'act-one', name: '第一阶段', startDate: '2030/03/01', endDate: '2030/03/31' },
     { id: 'act-two', name: '第二阶段', startDate: '2030/04/01', endDate: '2030/05/31' },
@@ -138,8 +138,10 @@ try {
   await page.locator('#branch-name').fill('南线');
   await page.locator('#branch-parent').selectOption('e2');
   await page.locator('#event-summary').fill('由浏览器验收创建');
-  await page.locator('#event-people').fill('人物丙');
+  await page.locator('#event-people').fill('人物甲');
   await page.locator('.profile-disclosure').first().locator('summary').click();
+  assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'C');
+  assert.equal(await page.locator('.profile-disclosure').first().locator('input[aria-label*="罩杯"]').count(), 0);
   await page.locator('.body-data-form input:not([type="checkbox"])').first().evaluate(element => { const input = element; input.value = '测试内衣'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   const npcToggle = page.locator('.profile-disclosure').first().getByRole('checkbox');
   await npcToggle.check();
@@ -154,7 +156,7 @@ try {
   const newBranch = saved.branches.find(branch => branch.name === '南线');
   assert.equal(newBranch.parentEventId, 'e2');
   assert.equal(saved.events.find(event => event.title === '新增分支事件').branchId, newBranch.id);
-  assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物丙'].underwear, '测试内衣');
+  assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物甲'].underwear, '测试内衣');
 
   await page.getByRole('button', { name: '时间流', exact: true }).click();
   assert(await page.locator('.flow-board').isVisible());
@@ -168,7 +170,7 @@ try {
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: '删除线路 北线' }).click();
   await waitForArchive(archive => archive.branches.length === 1 && archive.branches[0].name === '南线');
-  await page.getByRole('button', { name: '人物身体数据', exact: true }).click();
+  await page.getByRole('button', { name: '人物基础数据档案', exact: true }).click();
   assert(await page.locator('.body-table').isVisible());
   await page.getByLabel('身高').first().fill('175');
   await waitForArchive(archive => archive.mainCharacters?.[0]?.height === 175);
@@ -208,7 +210,7 @@ try {
     page.getByRole('button', { name: '导出 Markdown', exact: true }).click(),
   ]);
   const storyMarkdown = await fs.readFile(await storyMarkdownDownload.path(), 'utf8');
-  assert(storyMarkdown.includes('人物丙'));
+  assert(storyMarkdown.includes('人物甲'));
   assert(storyMarkdown.includes('测试内衣'));
 
   await page.locator('.stage-summary').filter({ hasText: '第一阶段' }).getByRole('button', { name: '展开阶段' }).click();

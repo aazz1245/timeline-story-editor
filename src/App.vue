@@ -257,14 +257,14 @@ watch(story, next => {
       <div v-if="loading" class="loading">正在读取本机故事…</div>
       <div v-else-if="!story" class="content"><div class="empty-state"><strong>本机还没有故事档案</strong><div>新建故事后开始编辑。</div><div class="toolbar" style="justify-content:center; margin-top:16px;"><button class="btn primary" type="button" @click="createStory"><PhPlus :size="17" aria-hidden="true" />新建故事</button></div></div></div>
       <div v-else class="content">
-        <nav class="view-tabs" aria-label="工作区视图"><button v-for="tab in [{ id: 'timeline', label: '时间线' }, { id: 'flow', label: '时间流' }, { id: 'people', label: '人物身体数据' }, { id: 'compendium', label: '图鉴' }]" :key="tab.id" class="view-tab" :class="{ active: view === tab.id }" type="button" :aria-current="view === tab.id ? 'page' : undefined" @click="setView(tab.id)">{{ tab.label }}</button></nav>
+        <nav class="view-tabs" aria-label="工作区视图"><button v-for="tab in [{ id: 'timeline', label: '时间线' }, { id: 'flow', label: '时间流' }, { id: 'people', label: '人物基础数据档案' }, { id: 'compendium', label: '图鉴' }]" :key="tab.id" class="view-tab" :class="{ active: view === tab.id }" type="button" :aria-current="view === tab.id ? 'page' : undefined" @click="setView(tab.id)">{{ tab.label }}</button></nav>
         <TimelineBoard v-if="view === 'timeline'" :events="sortedEvents" :branches="story.branches" :stages="story.semesters" :collapsed-months="collapsedMonths" :collapsed-stages="collapsedStages" :query="query" @toggle-month="toggleMonth" @toggle-stage="toggleStage" @edit="modalEvent = $event" @delete="deleteEvent" @select="modalEvent = $event" @export="exportEvent" />
         <TimelineFlowBoard v-else-if="view === 'flow'" :events="story.events" :branches="story.branches" :stages="story.semesters" @select="modalEvent = $event" @edit="modalEvent = $event" @export="exportEvent" @delete-branch="deleteBranch" />
         <PeopleBoard v-else-if="view === 'people'" :story="story" @save="save" />
         <CompendiumBoard v-else :items="compendium" @save="saveCompendium" />
       </div>
     </main>
-    <EventModal v-if="modalEvent !== undefined" :event="modalEvent" :branches="story?.branches || []" :events="story?.events || []" @close="modalEvent = undefined" @save="saveEvent" />
+    <EventModal v-if="modalEvent !== undefined" :event="modalEvent" :branches="story?.branches || []" :events="story?.events || []" :main-characters="story?.mainCharacters || []" @close="modalEvent = undefined" @save="saveEvent" />
     <StageSettingsModal v-if="stageModal" :stages="story?.semesters || []" @close="stageModal = false" @save="saveStages" />
     <LocalSettingsModal v-if="settingsOpen" :data-directory="settingsDirectory" @close="settingsOpen = false" @refresh="refreshStories(); story && loadStory(story.storyId)" @save="changeDataDirectory" />
   </div>
