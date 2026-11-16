@@ -124,7 +124,9 @@ try {
   assert.equal((await waitForArchive(archive => archive.semesters.length === 3)).semesters.length, 3);
 
   await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).click();
-  assert.equal(await page.locator('.stage-summary').count(), 0);
+  assert.equal(await page.locator('.stage-summary').count(), 2);
+  assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).getAttribute('aria-expanded'), 'true');
+  assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第二阶段' }).getAttribute('aria-expanded'), 'false');
   const march = page.locator('.month-section').filter({ hasText: '2030年03月' });
   assert.equal(await march.locator('.month-header').getAttribute('aria-expanded'), 'false');
   await march.locator('.month-header').click();
@@ -146,6 +148,7 @@ try {
   assert.equal(await page.locator('.profile-disclosure').first().locator('input:not([type="checkbox"])').first().isDisabled(), true);
   await npcToggle.uncheck();
   await page.getByRole('button', { name: '保存事件' }).click();
+  await page.locator('.stage-toggle').filter({ hasText: '第二阶段' }).click();
   await page.getByRole('heading', { name: '新增分支事件' }).waitFor();
   const saved = await waitForArchive(archive => archive.events.length === 5);
   assert.equal(saved.events.length, 5);
@@ -159,6 +162,11 @@ try {
   assert(await page.locator('.flow-board').isVisible());
   assert(await page.locator('.flow-line').count() >= 2);
   assert.equal(await page.locator('.flow-stage-chip[aria-expanded="true"]').count(), 1);
+  await page.locator('.flow-stage-chip').filter({ hasText: '第一阶段' }).click();
+  assert.equal(await page.locator('.flow-stage-chip').filter({ hasText: '第一阶段' }).getAttribute('aria-expanded'), 'true');
+  assert.equal(await page.locator('.flow-stage-chip').filter({ hasText: '第二阶段' }).getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.locator('.flow-date').filter({ hasText: '2030年03月' }).count() > 0, true);
+  assert.equal(await page.locator('.flow-date').filter({ hasText: '2030年05月' }).count(), 0);
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: '删除线路 北线' }).click();
   await waitForArchive(archive => archive.branches.length === 1 && archive.branches[0].name === '南线');
@@ -186,6 +194,7 @@ try {
   await waitForArchive(archive => archive.savedAt);
   assert((await fs.readdir(storiesDir)).some(file => file.startsWith('验收故事_') && file.endsWith('.json')));
 
+  await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).click();
   const eventDownloadPromise = page.waitForEvent('download');
   await page.locator('.event-card').filter({ hasText: '测试起点' }).getByRole('button', { name: '导出 测试起点' }).click();
   const eventDownload = await eventDownloadPromise;

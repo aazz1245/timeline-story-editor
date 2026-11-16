@@ -111,7 +111,17 @@ async function deleteBranch(branchId: string) {
 function toggleMonth(month: string) {
   const next = new Set(collapsedMonths.value); next.has(month) ? next.delete(month) : next.add(month); collapsedMonths.value = next;
 }
-function toggleStage(stageId: string) { const next = new Set(collapsedStages.value); next.has(stageId) ? next.delete(stageId) : next.add(stageId); collapsedStages.value = next; }
+function toggleStage(stageId: string) {
+  const next = new Set<string>();
+  if (collapsedStages.value.has(stageId)) {
+    // Only one stage is visible at a time so an older stage cannot leave
+    // newer content visible alongside it.
+    story.value?.semesters.filter(stage => stage.id !== stageId).forEach(stage => next.add(stage.id));
+  } else {
+    story.value?.semesters.forEach(stage => next.add(stage.id));
+  }
+  collapsedStages.value = next;
+}
 function focusStage(stageId: string | null) { focusedStageId.value = stageId; if (stageId) collapsedStages.value = new Set([...collapsedStages.value].filter(id => id !== stageId)); }
 async function saveStages(stages: StoryArchive['semesters']) { if (!story.value) return; stageModal.value = false; await save({ ...story.value, semesters: stages }); }
 function exportJson() {

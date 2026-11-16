@@ -34,8 +34,13 @@ function toggleDay(lineId: string | null, date: string) {
   expandedDays.value = next;
 }
 function toggleStage(stageId: string) {
-  const next = new Set(collapsedStageIds.value);
-  next.has(stageId) ? next.delete(stageId) : next.add(stageId);
+  const next = new Set<string>();
+  if (collapsedStageIds.value.has(stageId)) {
+    // Keep the flow focused on one date range at a time.
+    props.stages.filter(stage => stage.id !== stageId).forEach(stage => next.add(stage.id));
+  } else {
+    props.stages.forEach(stage => next.add(stage.id));
+  }
   collapsedStageIds.value = next;
 }
 function expandAllStages() { collapsedStageIds.value = new Set(); }
