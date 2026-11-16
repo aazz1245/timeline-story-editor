@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.npm-cache/
+.DS_Store
+Thumbs.db
+*.log
+
+# Local stories, compendium, migration reports, and archives
+data/**
+!data/.gitkeep
+import_temp.md
+
+# User-owned legacy content and local tooling
+SKILL.md
+.agents/
+事件时间线记录工具Propuls+.html
+/验收/
+/模板/**
+.local-backup/

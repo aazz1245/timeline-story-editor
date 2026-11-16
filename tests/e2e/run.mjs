@@ -1,0 +1,176 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import net from 'node:net';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'timeline-e2e-'));
+const storiesDir = path.join(dataDir, 'stories');
+await fs.mkdir(storiesDir, { recursive: true });
+const story = {
+  storyId: 'e2e-story', storyName: '验收故事',
+  events: [
+    { id: 'e1', title: '测试起点', date: '2030/03/10', time: '上午', location: '测试站', summary: '起点摘要', content: '起点正文', people: ['人物甲'], peopleData: {}, order: 1, branchId: null },
+    { id: 'e2', title: '测试分歧', date: '2030/03/20', time: '下午', location: '测试站', summary: '分歧摘要', content: '分歧正文', people: ['人物甲'], peopleData: {}, order: 2, branchId: null },
+    { id: 'e3', title: '测试支线结尾', date: '2030/05/01', time: '晚上', location: '测试站', summary: '支线摘要', content: '支线正文', people: ['人物乙'], peopleData: {}, order: 3, branchId: 'north' },
+    { id: 'e4', title: '同日后续', date: '2030/05/01', time: '深夜', location: '测试站', summary: '同日第二事件', content: '第二段正文', people: ['人物甲'], peopleData: {}, order: 4, branchId: null },
+  ],
+  branches: [{ id: 'north', name: '北线', parentEventId: 'e2', themeColor: '#0891b2' }],
+  mainCharacters: [{ name: '人物甲', notes: '验收人物' }],
+  semesters: [
+    { id: 'act-one', name: '第一阶段', startDate: '2030/03/01', endDate: '2030/03/31' },
+    { id: 'act-two', name: '第二阶段', startDate: '2030/04/01', endDate: '2030/05/31' },
+  ],
+  semesterGroups: [{ id: 'acts', name: '故事阶段', periods: ['act-one', 'act-two'] }], savedAt: new Date().toISOString(),
+};
+await fs.writeFile(path.join(storiesDir, 'e2e-story.json'), JSON.stringify(story, null, 2));
+await fs.writeFile(path.join(dataDir, 'compendium.json'), JSON.stringify([{ id: 'device', name: '测试联络器', category: '道具', details: '用于验证本机图鉴。' }]));
+
+async function apiStories(baseUrl) {
+  const response = await fetch(`${baseUrl}/api/stories`);
+  assert(response.ok);
+  return response.json();
+}
+
+async function waitForArchive(filePath, predicate) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const archive = JSON.parse(await fs.readFile(filePath, 'utf8'));
+    if (predicate(archive)) return archive;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error(`Archive update timed out: ${path.basename(filePath)}`);
+}
+
+const portProbe = net.createServer();
+await new Promise(resolve => portProbe.listen(0, '127.0.0.1', resolve));
+const port = portProbe.address().port;
+await new Promise(resolve => portProbe.close(resolve));
+const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
+  cwd: root,
+  env: { ...process.env, TIMELINE_DATA_DIR: dataDir, PORT: String(port) },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+let serverOutput = '';
+server.stdout.on('data', chunk => { serverOutput += String(chunk); });
+server.stderr.on('data', chunk => { serverOutput += String(chunk); });
+const baseUrl = `http://127.0.0.1:${port}`;
+let browser;
+try {
+  let ready = false;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    try { ready = (await fetch(`${baseUrl}/api/health`)).ok; } catch { /* server starting */ }
+    if (ready) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert(ready, `Local archive server did not start: ${serverOutput}`);
+  browser = await chromium.launch({ executablePath: process.env.PROPULS_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+  const errors = [];
+  page.on('pageerror', error => errors.push(String(error)));
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.app-shell');
+  assert(await page.locator('.sidebar').isVisible());
+  assert.equal(await page.locator('.event-card').count(), 2);
+  assert.equal(await page.locator('.stage-summary').count(), 1);
+  const may = page.locator('.month-section').filter({ hasText: '2030年05月' });
+  assert.equal(await may.locator('.month-header').getAttribute('aria-expanded'), 'true');
+  assert.deepEqual(await may.locator('.event-title').allTextContents(), ['测试支线结尾', '同日后续']);
+  const eventCard = may.locator('.event-card').filter({ hasText: '测试支线结尾' });
+  await eventCard.getByRole('button', { name: '展开 测试支线结尾 详情' }).click();
+  assert(await eventCard.locator('.event-detail').isVisible());
+  assert.equal(await eventCard.locator('.event-date').evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
+  const detailLayers = await eventCard.evaluate(element => ({ detailLeft: parseFloat(getComputedStyle(element.querySelector('.event-detail')).left), axisLeft: parseFloat(getComputedStyle(element, '::before').left) }));
+  assert(detailLayers.detailLeft > detailLayers.axisLeft);
+  await eventCard.getByRole('button', { name: '收起 测试支线结尾 详情' }).click();
+  await page.getByRole('button', { name: '阶段设置' }).click();
+  await page.getByRole('button', { name: '添加阶段' }).click();
+  const newStage = page.locator('.stage-editor-row').last().locator('input');
+  await newStage.nth(0).fill('第三阶段');
+  await newStage.nth(1).fill('2030/06/01');
+  await newStage.nth(2).fill('2030/06/30');
+  await page.getByRole('button', { name: '保存阶段' }).click();
+  const archivePath = path.join(dataDir, 'stories', 'e2e-story.json');
+  assert.equal((await waitForArchive(archivePath, archive => archive.semesters.length === 3)).semesters.length, 3);
+
+  await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).click();
+  assert.equal(await page.locator('.stage-summary').count(), 0);
+  const march = page.locator('.month-section').filter({ hasText: '2030年03月' });
+  assert.equal(await march.locator('.month-header').getAttribute('aria-expanded'), 'false');
+  await march.locator('.month-header').click();
+  assert.equal(await march.locator('.event-card').count(), 2);
+
+  await page.getByRole('button', { name: '新建事件' }).click();
+  await page.locator('#event-title').fill('新增分支事件');
+  await page.locator('#event-date').fill('2030/05/02');
+  await page.locator('#event-time').selectOption('凌晨');
+  await page.locator('#event-branch').selectOption('__create_branch__');
+  await page.locator('#branch-name').fill('南线');
+  await page.locator('#branch-parent').selectOption('e2');
+  await page.locator('#event-summary').fill('由浏览器验收创建');
+  await page.locator('#event-people').fill('人物丙');
+  await page.getByRole('button', { name: '保存事件' }).click();
+  await page.getByRole('heading', { name: '新增分支事件' }).waitFor();
+  const saved = await waitForArchive(archivePath, archive => archive.events.length === 5);
+  assert.equal(saved.events.length, 5);
+  assert.equal(saved.branches.length, 2);
+  const newBranch = saved.branches.find(branch => branch.name === '南线');
+  assert.equal(newBranch.parentEventId, 'e2');
+  assert.equal(saved.events.find(event => event.title === '新增分支事件').branchId, newBranch.id);
+
+  await page.getByRole('button', { name: '分支', exact: true }).click();
+  assert(await page.locator('.branch-card').filter({ hasText: '南线' }).isVisible());
+  await page.getByRole('button', { name: '人物', exact: true }).click();
+  assert(await page.locator('.person-card').filter({ hasText: '人物丙' }).isVisible());
+  await page.getByRole('button', { name: '图鉴', exact: true }).click();
+  assert(await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).isVisible());
+
+  await page.getByRole('button', { name: '时间线', exact: true }).click();
+  const markdown = '### 2030/05/03 下午 - Markdown 导入事件\n**线路**: 分支:南线\n**地点**: 港口\n**人物**: 人物乙\n\n> Markdown 摘要\n\nMarkdown 正文';
+  await page.locator('input[type=file][accept*="markdown"]').setInputFiles({ name: 'import.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown) });
+  const imported = await waitForArchive(archivePath, archive => archive.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
+  assert(imported.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出 JSON' }).click();
+  const download = await downloadPromise;
+  const exportedPath = path.join(dataDir, download.suggestedFilename());
+  await download.saveAs(exportedPath);
+  assert.equal(JSON.parse(await fs.readFile(exportedPath, 'utf8')).events.length, 6);
+
+  page.once('dialog', dialog => dialog.accept('改名验收故事'));
+  const originalStoryRow = page.locator('.story-row').filter({ hasText: '验收故事' });
+  await originalStoryRow.hover();
+  await originalStoryRow.getByRole('button', { name: '重命名 验收故事' }).click();
+  await page.getByRole('heading', { name: '改名验收故事' }).waitFor();
+  const importedStory = {
+    storyId: 'json-imported', storyName: 'JSON 导入故事', events: [
+      { id: 'json-event', title: 'JSON 事件', date: '2040/01/01', time: '上午', location: '', summary: '', content: '通过旧格式导入', people: [], peopleData: {}, order: 1, branchId: null },
+    ],
+  };
+  await page.locator('input[type=file][accept*="application/json"]').first().setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(importedStory)) });
+  await page.getByRole('heading', { name: 'JSON 导入故事' }).waitFor();
+  assert(await page.getByRole('heading', { name: 'JSON 事件' }).isVisible());
+  page.once('dialog', dialog => dialog.accept());
+  const importedStoryRow = page.locator('.story-row').filter({ hasText: 'JSON 导入故事' });
+  await importedStoryRow.hover();
+  await importedStoryRow.getByRole('button', { name: '删除 JSON 导入故事' }).click();
+  await page.getByRole('heading', { name: '改名验收故事' }).waitFor();
+  assert.equal((await apiStories(baseUrl)).some(item => item.storyId === 'json-imported'), false);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert(await page.locator('.app-shell').isVisible());
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  await page.screenshot({ path: path.join(dataDir, 'mobile.png'), fullPage: true });
+  assert.deepEqual(errors, []);
+  console.log('PASS archive API, month/stage folding, ordered same-day events, event overlays, story/event/stage CRUD, branches, people, compendium, Markdown/JSON and mobile layout');
+} finally {
+  await browser?.close();
+  server.kill();
+  await new Promise(resolve => server.once('exit', resolve));
+  await fs.rm(dataDir, { recursive: true, force: true });
+}

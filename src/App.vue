@@ -1,0 +1,183 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue';
+import { PhDownloadSimple, PhFileArrowUp, PhFileText, PhMagnifyingGlass, PhPlus, PhUploadSimple } from '@phosphor-icons/vue';
+import { api } from './shared/api';
+import { parseMarkdown } from './shared/domain/markdown';
+import { createEmptyStory, normalizeStory } from './shared/domain/normalize';
+import type { StoryArchive, StorySummary, TimelineEvent, CompendiumItem } from './shared/types';
+import StorySidebar from './features/stories/StorySidebar.vue';
+import TimelineBoard from './features/timeline/TimelineBoard.vue';
+import EventModal from './features/events/EventModal.vue';
+import BranchBoard from './features/branches/BranchBoard.vue';
+import PeopleBoard from './features/people/PeopleBoard.vue';
+import CompendiumBoard from './features/compendium/CompendiumBoard.vue';
+import StageSettingsModal from './features/timeline/StageSettingsModal.vue';
+
+const stories = ref<StorySummary[]>([]);
+const selectedId = ref('');
+const story = ref<StoryArchive | null>(null);
+const loading = ref(true);
+const saving = ref(false);
+const query = ref('');
+const collapsedMonths = ref<Set<string>>(new Set());
+const modalEvent = ref<TimelineEvent | null | undefined>(undefined);
+const notice = ref('');
+const fileInput = ref<HTMLInputElement>();
+const jsonInput = ref<HTMLInputElement>();
+const view = ref<'timeline' | 'branches' | 'people' | 'compendium'>('timeline');
+const compendium = ref<CompendiumItem[]>([]);
+const collapsedStages = ref<Set<string>>(new Set());
+const focusedStageId = ref<string | null>(null);
+const stageModal = ref(false);
+
+const sortedEvents = computed(() => story.value?.events || []);
+const currentMonth = computed(() => sortedEvents.value.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.date.slice(0, 7));
+const latestEventDate = computed(() => sortedEvents.value.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.date);
+const branchCount = computed(() => story.value?.branches.length || 0);
+const peopleCount = computed(() => story.value?.mainCharacters.length || 0);
+
+async function refreshStories(selectLatest = true) {
+  stories.value = await api.stories();
+  if (selectLatest && !selectedId.value) selectedId.value = stories.value[0]?.storyId || '';
+}
+async function loadStory(id: string) {
+  if (!id) return;
+  loading.value = true;
+  try {
+    story.value = await api.story(id);
+    selectedId.value = id;
+    collapsedMonths.value = new Set(story.value.events.map(event => event.date.slice(0, 7)).filter(month => month !== currentMonth.value));
+    const latestStage = story.value.semesters.find(stage => latestEventDate.value && latestEventDate.value >= stage.startDate && latestEventDate.value <= stage.endDate);
+    collapsedStages.value = new Set(story.value.semesters.filter(stage => stage.id !== latestStage?.id).map(stage => stage.id));
+    focusedStageId.value = null;
+  } catch (error) { notice.value = error instanceof Error ? error.message : '读取故事失败'; }
+  finally { loading.value = false; }
+}
+async function save(next: StoryArchive) {
+  saving.value = true;
+  try { story.value = await api.saveStory(next); await refreshStories(false); notice.value = '已保存'; }
+  catch (error) { notice.value = error instanceof Error ? error.message : '保存失败'; }
+  finally { saving.value = false; setTimeout(() => { notice.value = ''; }, 2200); }
+}
+async function createStory() {
+  const name = window.prompt('新故事名称', '未命名故事');
+  if (!name?.trim()) return;
+  const created = await api.createStory(name.trim());
+  await refreshStories(false); await loadStory(created.storyId);
+}
+async function renameStory(id: string) {
+  const target = stories.value.find(item => item.storyId === id);
+  if (!target) return;
+  const name = window.prompt('故事名称', target.storyName);
+  if (!name?.trim() || !story.value) return;
+  const current = id === story.value.storyId ? story.value : await api.story(id);
+  const renamed = await api.saveStory({ ...current, storyName: name.trim() });
+  if (id === story.value.storyId) story.value = renamed;
+  await refreshStories(false);
+}
+async function removeStory(id: string) {
+  const target = stories.value.find(item => item.storyId === id);
+  if (!target || !window.confirm(`删除故事「${target.storyName}」？`)) return;
+  await api.deleteStory(id);
+  if (id === selectedId.value) { story.value = null; selectedId.value = ''; }
+  await refreshStories();
+  if (stories.value[0]) await loadStory(stories.value[0].storyId);
+}
+async function deleteEvent(event: TimelineEvent) {
+  if (!story.value || !window.confirm(`删除事件「${event.title}」？`)) return;
+  await save({ ...story.value, events: story.value.events.filter(item => String(item.id) !== String(event.id)) });
+}
+async function saveEvent(event: TimelineEvent, branch?: import('./shared/types').TimelineBranch) {
+  if (!story.value) return;
+  if (branch && story.value.branches.some(item => item.name === branch.name)) { notice.value = `已存在同名分支「${branch.name}」`; return; }
+  const events = story.value.events.some(item => String(item.id) === String(event.id)) ? story.value.events.map(item => String(item.id) === String(event.id) ? event : item) : [...story.value.events, { ...event, order: story.value.events.length + 1 }];
+  modalEvent.value = undefined;
+  await save({ ...story.value, events, branches: branch ? [...story.value.branches, branch] : story.value.branches });
+}
+async function createBranch() {
+  if (!story.value) return;
+  const name = window.prompt('分支名称');
+  if (!name?.trim() || story.value.branches.some(branch => branch.name === name.trim())) return;
+  await save({ ...story.value, branches: [...story.value.branches, { id: `branch-${crypto.randomUUID()}`, name: name.trim(), parentEventId: null }] });
+}
+function toggleMonth(month: string) {
+  const next = new Set(collapsedMonths.value); next.has(month) ? next.delete(month) : next.add(month); collapsedMonths.value = next;
+}
+function toggleStage(stageId: string) { const next = new Set(collapsedStages.value); next.has(stageId) ? next.delete(stageId) : next.add(stageId); collapsedStages.value = next; }
+function focusStage(stageId: string | null) { focusedStageId.value = stageId; if (stageId) collapsedStages.value = new Set([...collapsedStages.value].filter(id => id !== stageId)); }
+async function saveStages(stages: StoryArchive['semesters']) { if (!story.value) return; stageModal.value = false; await save({ ...story.value, semesters: stages }); }
+function exportJson() {
+  if (!story.value) return;
+  const blob = new Blob([JSON.stringify(story.value, null, 2)], { type: 'application/json' });
+  download(blob, `${story.value.storyName}.json`);
+}
+
+function exportMarkdown() {
+  if (!story.value) return;
+  const branchName = (id: string | null) => id ? story.value!.branches.find(branch => branch.id === id)?.name || '未知分支' : '主线';
+  const renderEvent = (event: TimelineEvent) => [`### ${event.date} ${event.time} - ${event.title}`, `**线路**: ${branchName(event.branchId)}`, event.location ? `**地点**: ${event.location}` : '', event.people.length ? `**人物**: ${event.people.join(', ')}` : '', '', event.summary ? `> ${event.summary}` : '', '', event.content, '', '---', ''].join('\n');
+  const sections = [story.value.events.filter(event => !event.branchId).map(renderEvent).join('\n')];
+  for (const branch of story.value.branches) { const parent = story.value.events.find(event => String(event.id) === String(branch.parentEventId)); sections.push(`## 结局分支: ${branch.name}${parent ? ` (分歧点: ${parent.title})` : ''}\n\n${story.value.events.filter(event => event.branchId === branch.id).map(renderEvent).join('\n')}`); }
+  download(new Blob([sections.join('\n')], { type: 'text/markdown;charset=utf-8' }), `${story.value.storyName}.md`);
+}
+async function importJson(file: File) {
+  const imported = normalizeStory(JSON.parse(await file.text()));
+  if (!story.value) { const created = await api.importStory(imported); await refreshStories(false); await loadStory(created.storyId); }
+  else if (imported.storyId === story.value.storyId) await save({ ...imported, storyName: imported.storyName || story.value.storyName });
+  else { const created = await api.importStory(imported); await refreshStories(false); await loadStory(created.storyId); }
+}
+async function importMarkdown(file: File) {
+  if (!story.value) return;
+  const result = parseMarkdown(await file.text(), story.value);
+  await save(result.story); notice.value = result.warnings.join('；') || `已导入 ${result.importedCount} 个事件`;
+}
+function download(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
+function exportCompendium() { download(new Blob([JSON.stringify(compendium.value, null, 2)], { type: 'application/json' }), 'compendium.json'); }
+async function importCompendium(file: File) { const data = JSON.parse(await file.text()); if (!Array.isArray(data)) return; compendium.value = data; await api.saveCompendium(data); notice.value = `已导入 ${data.length} 项图鉴`; }
+function openFile(kind: 'md' | 'json') { (kind === 'md' ? fileInput : jsonInput).value?.click(); }
+function setView(next: string) { if (['timeline', 'branches', 'people', 'compendium'].includes(next)) view.value = next as typeof view.value; }
+async function onFile(event: Event, kind: 'md' | 'json') { const file = (event.target as HTMLInputElement).files?.[0]; if (file) await (kind === 'md' ? importMarkdown(file) : importJson(file)); (event.target as HTMLInputElement).value = ''; }
+
+onMounted(async () => { try { await refreshStories(); if (stories.value[0]) await loadStory(stories.value[0].storyId); compendium.value = await api.compendium(); } catch (error) { notice.value = error instanceof Error ? error.message : '服务未启动'; } finally { loading.value = false; } });
+watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); });
+</script>
+
+<template>
+  <div class="app-shell">
+    <StorySidebar :stories="stories" :selected-id="selectedId" :loading="loading" @select="selectedId = $event" @create="createStory" @rename="renameStory" @remove="removeStory" @settings="notice = '档案保存于本机 data/stories'" />
+    <main class="workspace">
+      <header class="topbar">
+        <div><h1>{{ story?.storyName || '故事时间线' }}</h1><p>{{ story ? `${story.events.length} 个事件 · ${branchCount} 条分支` : '本机故事工作区' }}</p></div>
+        <div class="toolbar">
+          <label class="btn" title="搜索事件"><PhMagnifyingGlass :size="18" aria-hidden="true" /><input v-model="query" aria-label="搜索事件" placeholder="搜索事件" style="width: 120px; border: 0; outline: 0; background: transparent;" /></label>
+          <button class="btn" type="button" @click="openFile('md')"><PhUploadSimple :size="18" aria-hidden="true" /><span>导入 Markdown</span></button>
+          <button class="btn" type="button" @click="openFile('json')"><PhFileArrowUp :size="18" aria-hidden="true" /><span>加载 JSON</span></button>
+          <button class="btn" type="button" :disabled="!story" @click="exportMarkdown"><PhFileText :size="18" aria-hidden="true" /><span>导出 Markdown</span></button>
+          <button class="btn" type="button" @click="exportJson"><PhDownloadSimple :size="18" aria-hidden="true" /><span>导出 JSON</span></button>
+          <button v-if="view === 'timeline'" class="btn" type="button" @click="stageModal = true"><span>阶段设置</span></button>
+          <button class="btn primary" type="button" @click="modalEvent = null"><PhPlus :size="18" aria-hidden="true" /><span>新建事件</span></button>
+          <input ref="fileInput" type="file" accept=".md,.markdown,text/markdown" hidden @change="onFile($event, 'md')" />
+          <input ref="jsonInput" type="file" accept=".json,application/json" hidden @change="onFile($event, 'json')" />
+        </div>
+      </header>
+      <div v-if="notice" class="notice" role="status">{{ notice }}</div>
+      <div v-if="loading" class="loading">正在读取本机故事…</div>
+      <div v-else-if="!story" class="content"><div class="empty-state"><strong>本机还没有故事档案</strong><div>新建故事，或从旧版 JSON 档案开始。</div><div class="toolbar" style="justify-content:center; margin-top:16px;"><button class="btn primary" type="button" @click="createStory"><PhPlus :size="17" aria-hidden="true" />新建故事</button><button class="btn" type="button" @click="openFile('json')"><PhFileArrowUp :size="17" aria-hidden="true" />导入旧版 JSON</button></div></div></div>
+      <div v-else class="content">
+        <nav class="view-tabs" aria-label="工作区视图"><button v-for="tab in [{ id: 'timeline', label: '时间线' }, { id: 'branches', label: '分支' }, { id: 'people', label: '人物' }, { id: 'compendium', label: '图鉴' }]" :key="tab.id" class="view-tab" :class="{ active: view === tab.id }" type="button" :aria-current="view === tab.id ? 'page' : undefined" @click="setView(tab.id)">{{ tab.label }}</button></nav>
+        <section v-if="view === 'timeline'" class="summary-strip" aria-label="故事概览">
+          <div class="summary-card"><span>事件</span><strong>{{ story.events.length }}</strong></div>
+          <div class="summary-card"><span>分支</span><strong>{{ branchCount }}</strong></div>
+          <div class="summary-card"><span>人物</span><strong>{{ peopleCount }}</strong></div>
+          <div class="summary-card"><span>最新月份</span><strong>{{ currentMonth || '—' }}</strong></div>
+        </section>
+        <TimelineBoard v-if="view === 'timeline'" :events="sortedEvents" :branches="story.branches" :stages="story.semesters" :collapsed-months="collapsedMonths" :collapsed-stages="collapsedStages" :focused-stage-id="focusedStageId" :query="query" @toggle-month="toggleMonth" @toggle-stage="toggleStage" @focus-stage="focusStage" @edit="modalEvent = $event" @delete="deleteEvent" @select="modalEvent = $event" />
+        <BranchBoard v-else-if="view === 'branches'" :events="story.events" :branches="story.branches" @create="createBranch" @select="modalEvent = $event" />
+        <PeopleBoard v-else-if="view === 'people'" :story="story" @save="save" />
+        <CompendiumBoard v-else :items="compendium" @import="importCompendium" @export="exportCompendium" />
+      </div>
+    </main>
+    <EventModal v-if="modalEvent !== undefined" :event="modalEvent" :branches="story?.branches || []" :events="story?.events || []" @close="modalEvent = undefined" @save="saveEvent" />
+    <StageSettingsModal v-if="stageModal" :stages="story?.semesters || []" @close="stageModal = false" @save="saveStages" />
+  </div>
+</template>
