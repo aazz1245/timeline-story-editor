@@ -51,9 +51,16 @@ export function createEmptyStory(name = '未命名故事'): StoryArchive {
 
 export function calculateCup(upperBust: number | null | undefined, lowerBust: number | null | undefined): string {
   const diff = Number(upperBust || 0) - Number(lowerBust || 0);
-  if (diff <= 0) return '—';
-  const letters = ['AA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-  return letters[Math.min(letters.length - 1, Math.max(0, Math.round(diff / 2.5)))];
+  const labels: Record<number, string> = {
+    8: 'A', 9: 'A', 10: 'A / B 边界', 11: 'B', 12: 'B', 13: 'B / C 边界',
+    14: 'C', 15: 'C', 16: 'C / D 边界', 17: 'D', 18: 'D / E 边界', 19: 'E',
+    20: 'E / F 边界', 21: 'F', 22: 'F / G 边界', 23: 'G', 24: 'G', 25: 'G / H 边界',
+    26: 'H', 27: 'H / I 边界', 28: 'I', 29: 'I', 30: 'I / J 边界', 31: 'J', 32: 'J',
+  };
+  if (diff <= 7) return 'AA';
+  if (labels[diff]) return labels[diff];
+  if (diff <= 37) return 'J+ (远超 J)';
+  return '远大于 J';
 }
 
 export function normalizeDate(value: string): string {

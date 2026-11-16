@@ -141,10 +141,10 @@ try {
   await page.locator('#event-people').fill('人物甲');
   await page.locator('.profile-disclosure').first().locator('summary').click();
   assert.equal(await page.locator('#人物甲-bust').inputValue(), '90');
-  assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'C');
+  assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'A');
   assert.equal(await page.locator('.profile-disclosure').first().locator('input[aria-label*="罩杯"]').count(), 0);
   await page.locator('#人物甲-bust').fill('95');
-  assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'E');
+  assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'B / C 边界');
   await page.locator('.body-data-form input:not([type="checkbox"])').first().evaluate(element => { const input = element; input.value = '测试内衣'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   const npcToggle = page.locator('.profile-disclosure').first().getByRole('checkbox');
   await npcToggle.check();
@@ -160,7 +160,7 @@ try {
   assert.equal(newBranch.parentEventId, 'e2');
   assert.equal(saved.events.find(event => event.title === '新增分支事件').branchId, newBranch.id);
   assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物甲'].underwear, '测试内衣');
-  assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物甲'].cup, 'E');
+  assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物甲'].cup, 'B / C 边界');
 
   await page.getByRole('button', { name: '时间流', exact: true }).click();
   assert(await page.locator('.flow-board').isVisible());
@@ -184,7 +184,7 @@ try {
   assert.equal(savedBaseData.mainCharacters[0].upperBust, 85);
   assert.equal(savedBaseData.mainCharacters[0].lowerBust, 78);
   await page.getByRole('button', { name: '人物基础数据档案', exact: true }).click();
-  assert.equal(await page.locator('.body-table tbody tr').first().locator('output').textContent(), 'C');
+  assert.equal(await page.locator('.body-table tbody tr').first().locator('output').textContent(), 'AA');
   await page.getByRole('button', { name: '图鉴', exact: true }).click();
   assert(await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).isVisible());
   await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).getByRole('button', { name: '编辑图鉴 测试联络器' }).click();

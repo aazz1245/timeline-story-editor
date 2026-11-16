@@ -15,7 +15,7 @@ describe('story normalization', () => {
     expect(story.events[0].peopleData['甲'].underwear).toBe('测试内衣');
     expect(story.events[0].peopleData['甲'].bustSize).toBe(92);
     expect(story.events[0].peopleData['甲'].specialAccessories).toEqual([{ type: '耳机' }]);
-    expect(story.events[0].peopleData['甲'].cup).toBe('D');
+    expect(story.events[0].peopleData['甲'].cup).toBe('A / B 边界');
     expect(story.events[0].peopleData['甲'].penisState).toBe('未勃起');
   });
 });
