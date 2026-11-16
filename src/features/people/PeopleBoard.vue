@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue';
+import { nextTick, onBeforeUnmount, reactive, watch } from 'vue';
 import { PhPlus, PhTrash, PhCheck } from '@phosphor-icons/vue';
 import type { StoryArchive, TimelinePerson } from '../../shared/types';
 
 const props = defineProps<{ story: StoryArchive }>();
 const emit = defineEmits<{ save: [story: StoryArchive] }>();
 const draft = reactive<TimelinePerson[]>([]);
-watch(() => props.story.mainCharacters, people => draft.splice(0, draft.length, ...JSON.parse(JSON.stringify(people))), { immediate: true, deep: true });
+let syncing = false;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+watch(() => props.story.mainCharacters, people => {
+  syncing = true;
+  draft.splice(0, draft.length, ...JSON.parse(JSON.stringify(people)));
+  void nextTick(() => { syncing = false; });
+}, { immediate: true, deep: true });
 
 function addPerson() {
   draft.push({ name: '新人物', height: 170, upperBust: 80, lowerBust: 68, waist: 65, hip: 90, penisNormal: 8, penisErect: 12, notes: '' });
@@ -18,7 +24,11 @@ function cup(person: TimelinePerson) {
   const letters = ['AA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
   return letters[Math.min(letters.length - 1, Math.max(0, Math.round(diff / 2.5)))];
 }
+function clearSaveTimer() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; }
+}
 function save() {
+  clearSaveTimer();
   const people = JSON.parse(JSON.stringify(draft)) as TimelinePerson[];
   const events = props.story.events.map(event => {
     const peopleData = { ...event.peopleData };
@@ -30,6 +40,12 @@ function save() {
   });
   emit('save', { ...props.story, mainCharacters: people, events });
 }
+watch(draft, () => {
+  if (syncing) return;
+  clearSaveTimer();
+  saveTimer = setTimeout(() => { saveTimer = undefined; save(); }, 700);
+}, { deep: true });
+onBeforeUnmount(clearSaveTimer);
 </script>
 
 <template>

@@ -3,8 +3,8 @@ import { PhCaretDown, PhCaretRight, PhExport, PhGitBranch, PhMapPin, PhPencilSim
 import { computed, ref } from 'vue';
 import type { StoryPeriod, TimelineBranch, TimelineEvent } from '../../shared/types';
 
-const props = defineProps<{ events: TimelineEvent[]; branches: TimelineBranch[]; stages: StoryPeriod[]; collapsedMonths: Set<string>; collapsedStages: Set<string>; focusedStageId: string | null; query: string }>();
-const emit = defineEmits<{ edit: [event: TimelineEvent]; delete: [event: TimelineEvent]; export: [event: TimelineEvent]; toggleMonth: [month: string]; toggleStage: [stageId: string]; focusStage: [stageId: string | null]; select: [event: TimelineEvent] }>();
+const props = defineProps<{ events: TimelineEvent[]; branches: TimelineBranch[]; stages: StoryPeriod[]; collapsedMonths: Set<string>; collapsedStages: Set<string>; query: string }>();
+const emit = defineEmits<{ edit: [event: TimelineEvent]; delete: [event: TimelineEvent]; export: [event: TimelineEvent]; toggleMonth: [month: string]; toggleStage: [stageId: string]; select: [event: TimelineEvent] }>();
 const expandedEvents = ref(new Set<string>());
 
 const branchMap = computed(() => new Map(props.branches.map(branch => [branch.id, branch.name])));
@@ -24,7 +24,6 @@ const branchDepth = computed(() => {
   return depths;
 });
 const stageCounts = computed(() => new Map(props.stages.map(stage => [stage.id, props.events.filter(event => inStage(event, stage)).length])));
-const stageName = (id: string) => props.stages.find(stage => stage.id === id)?.name || '';
 const inStage = (event: TimelineEvent, stage: StoryPeriod) => event.date >= stage.startDate && event.date <= stage.endDate;
 const stageBreakdown = (stage: StoryPeriod) => props.branches.map(branch => ({ branch, count: props.events.filter(event => inStage(event, stage) && event.branchId === branch.id).length })).filter(item => item.count);
 type MonthGroup = [month: string, events: TimelineEvent[]];
@@ -36,7 +35,6 @@ const stageSections = computed<StageSection[]>(() => {
     if (query && !`${event.title} ${event.summary} ${event.location} ${event.people.join(' ')}`.toLocaleLowerCase().includes(query)) continue;
     const stage = props.stages.find(item => inStage(event, item));
     if (stage && props.collapsedStages.has(stage.id)) continue;
-    if (props.focusedStageId && (!stage || stage.id !== props.focusedStageId)) continue;
     const month = event.date.slice(0, 7) || '未知月份';
     const key = stage?.id || '__unassigned__';
     if (!grouped.has(key)) grouped.set(key, { stage: stage || null, months: new Map() });
@@ -61,7 +59,6 @@ const stageSections = computed<StageSection[]>(() => {
 const timelineBlocks = computed(() => {
   const sectionsByStage = new Map(stageSections.value.filter(section => section.stage).map(section => [section.stage!.id, section]));
   return props.stages
-    .filter(stage => !props.focusedStageId || props.focusedStageId === stage.id)
     .map(stage => {
       const section = sectionsByStage.get(stage.id);
       return {
@@ -87,12 +84,6 @@ function toggleDetails(event: TimelineEvent) {
 
 <template>
   <section class="timeline" aria-label="事件时间线">
-    <div v-if="stages.length" class="stage-tools" aria-label="故事阶段">
-      <button v-for="stage in stages" :key="stage.id" class="stage-toggle" type="button" :aria-expanded="!collapsedStages.has(stage.id)" @click="emit('toggleStage', stage.id)">
-        <span>{{ stageName(stage.id) }}</span><small>{{ stageCounts.get(stage.id) || 0 }}</small>
-      </button>
-      <button v-for="stage in stages" :key="`${stage.id}-focus`" class="stage-focus" type="button" :aria-pressed="focusedStageId === stage.id" @click="emit('focusStage', focusedStageId === stage.id ? null : stage.id)">{{ focusedStageId === stage.id ? '返回全部' : `只看${stage.name}` }}</button>
-    </div>
     <div v-if="!stageSections.length" class="empty-state"><strong>暂无匹配事件</strong><div>导入 Markdown 或新建事件后，故事会出现在这里。</div></div>
     <template v-for="block in timelineBlocks" :key="block.stage.id">
       <section v-if="block.collapsed" class="stage-summary">

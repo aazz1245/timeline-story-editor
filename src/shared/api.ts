@@ -14,7 +14,6 @@ export const api = {
   stories: () => request<StorySummary[]>('/api/stories'),
   story: (id: string) => request<StoryArchive>(`/api/stories/${encodeURIComponent(id)}`),
   createStory: (storyName: string) => request<StoryArchive>('/api/stories', { method: 'POST', body: JSON.stringify({ storyName }) }),
-  importStory: (story: StoryArchive) => request<StoryArchive>('/api/stories', { method: 'POST', body: JSON.stringify(story) }),
   saveStory: (story: StoryArchive) => request<StoryArchive>(`/api/stories/${encodeURIComponent(story.storyId)}`, { method: 'PUT', body: JSON.stringify(story) }),
   deleteStory: (id: string) => request<void>(`/api/stories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   compendium: () => request<CompendiumItem[]>('/api/compendium'),

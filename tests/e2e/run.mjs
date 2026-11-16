@@ -31,12 +31,6 @@ const story = {
 await fs.writeFile(path.join(storiesDir, 'e2e-story.json'), JSON.stringify(story, null, 2));
 await fs.writeFile(compendiumPath, JSON.stringify([{ id: 'device', name: '测试联络器', category: '道具', details: '用于验证本机图鉴。' }]));
 
-async function apiStories(baseUrl) {
-  const response = await fetch(`${baseUrl}/api/stories`);
-  assert(response.ok);
-  return response.json();
-}
-
 async function readArchive() {
   let files;
   try { files = await fs.readdir(storiesDir); } catch { throw new Error('Archive not found'); }
@@ -101,6 +95,10 @@ try {
   await page.getByRole('button', { name: '保存目录' }).click();
   await page.getByRole('button', { name: '时间线', exact: true }).waitFor();
   assert.equal((await waitForArchive(archive => archive.storyName === '验收故事')).storyName, '验收故事');
+  assert.equal(await page.locator('.stage-toggle, .stage-focus').count(), 0);
+  assert(await page.locator('.save-status').isVisible());
+  assert.equal(await page.getByRole('button', { name: '导入 JSON' }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: '导出 JSON' }).count(), 0);
   assert.equal(await page.locator('.event-card').count(), 2);
   assert.equal(await page.locator('.stage-summary').count(), 1);
   const may = page.locator('.month-section').filter({ hasText: '2030年05月' });
@@ -123,10 +121,8 @@ try {
   await page.getByRole('button', { name: '保存阶段' }).click();
   assert.equal((await waitForArchive(archive => archive.semesters.length === 3)).semesters.length, 3);
 
-  await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).click();
+  await page.locator('.stage-summary').filter({ hasText: '第一阶段' }).getByRole('button', { name: '展开阶段' }).click();
   assert.equal(await page.locator('.stage-summary').count(), 2);
-  assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).getAttribute('aria-expanded'), 'true');
-  assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第二阶段' }).getAttribute('aria-expanded'), 'false');
   assert.deepEqual(await page.locator('.stage-heading-title').allTextContents(), ['第一阶段']);
   assert.equal(await page.getByRole('button', { name: '收起阶段 第一阶段' }).count(), 1);
   assert.equal(await page.locator('.timeline > .stage-section').first().locator('.stage-heading-title').textContent(), '第一阶段');
@@ -150,7 +146,7 @@ try {
   assert.equal(await page.locator('.profile-disclosure').first().locator('input:not([type="checkbox"])').first().isDisabled(), true);
   await npcToggle.uncheck();
   await page.getByRole('button', { name: '保存事件' }).click();
-  await page.locator('.stage-toggle').filter({ hasText: '第二阶段' }).click();
+  await page.locator('.stage-summary').filter({ hasText: '第二阶段' }).getByRole('button', { name: '展开阶段' }).click();
   await page.getByRole('heading', { name: '新增分支事件' }).waitFor();
   const saved = await waitForArchive(archive => archive.events.length === 5);
   assert.equal(saved.events.length, 5);
@@ -174,6 +170,8 @@ try {
   await waitForArchive(archive => archive.branches.length === 1 && archive.branches[0].name === '南线');
   await page.getByRole('button', { name: '人物身体数据', exact: true }).click();
   assert(await page.locator('.body-table').isVisible());
+  await page.getByLabel('身高').first().fill('175');
+  await waitForArchive(archive => archive.mainCharacters?.[0]?.height === 175);
   await page.getByRole('button', { name: '图鉴', exact: true }).click();
   assert(await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).isVisible());
   await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).getByRole('button', { name: '编辑图鉴 测试联络器' }).click();
@@ -196,46 +194,24 @@ try {
   await waitForArchive(archive => archive.savedAt);
   assert((await fs.readdir(storiesDir)).some(file => file.startsWith('验收故事_') && file.endsWith('.json')));
 
-  await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).click();
+  await page.locator('.stage-summary').filter({ hasText: '第一阶段' }).getByRole('button', { name: '展开阶段' }).click();
   const eventDownloadPromise = page.waitForEvent('download');
   await page.locator('.event-card').filter({ hasText: '测试起点' }).getByRole('button', { name: '导出 测试起点' }).click();
   const eventDownload = await eventDownloadPromise;
   assert(eventDownload.suggestedFilename().endsWith('.md'));
-
-  const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: '导出 JSON' }).click();
-  const download = await downloadPromise;
-  const exportedPath = path.join(dataDir, download.suggestedFilename());
-  await download.saveAs(exportedPath);
-  assert.equal(JSON.parse(await fs.readFile(exportedPath, 'utf8')).events.length, 6);
 
   page.once('dialog', dialog => dialog.accept('改名验收故事'));
   const originalStoryRow = page.locator('.story-row').filter({ hasText: '验收故事' });
   await originalStoryRow.hover();
   await originalStoryRow.getByRole('button', { name: '重命名 验收故事' }).click();
   await page.getByRole('heading', { name: '改名验收故事' }).waitFor();
-  const importedStory = {
-    storyId: 'json-imported', storyName: 'JSON 导入故事', events: [
-      { id: 'json-event', title: 'JSON 事件', date: '2040/01/01', time: '上午', location: '', summary: '', content: '通过旧格式导入', people: [], peopleData: {}, order: 1, branchId: null },
-    ],
-  };
-  await page.locator('input[type=file][accept*="application/json"]').first().setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(importedStory)) });
-  await page.getByRole('heading', { name: 'JSON 导入故事' }).waitFor();
-  assert(await page.getByRole('heading', { name: 'JSON 事件' }).isVisible());
-  page.once('dialog', dialog => dialog.accept());
-  const importedStoryRow = page.locator('.story-row').filter({ hasText: 'JSON 导入故事' });
-  await importedStoryRow.hover();
-  await importedStoryRow.getByRole('button', { name: '删除 JSON 导入故事' }).click();
-  await page.getByRole('heading', { name: '改名验收故事' }).waitFor();
-  assert.equal((await apiStories(baseUrl)).some(item => item.storyId === 'json-imported'), false);
-
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   assert(await page.locator('.app-shell').isVisible());
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.screenshot({ path: path.join(dataDir, 'mobile.png'), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log('PASS archive API, month/stage folding, ordered same-day events, event overlays, story/event/stage CRUD, timeline flow, body data, compendium editing, Markdown/JSON, single-event export and mobile layout');
+  console.log('PASS archive API, month/stage folding, ordered same-day events, event overlays, story/event/stage CRUD, timeline flow, body data, compendium editing, Markdown, single-event export and mobile layout');
 } finally {
   await browser?.close();
   server.kill();

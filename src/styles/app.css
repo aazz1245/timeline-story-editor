@@ -30,6 +30,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 28px; border-bottom: 1px solid var(--border); background: rgba(245,245,247,.82); backdrop-filter: blur(20px); }
 .topbar h1 { margin: 0; font-size: 21px; letter-spacing: -.03em; }
 .topbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: 13px; }
+.save-status { color: var(--success, #16803c); font-weight: 600; }
+.save-status.is-pending, .save-status.is-saving { color: var(--accent); }
+.save-status.is-error { color: var(--danger); }
 .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 0 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-solid); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.03); transition: transform var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast); }
 .btn:hover { border-color: rgba(0,0,0,.2); background: #fff; transform: translateY(-1px); }
@@ -83,10 +86,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .stage-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 5px 4px 2px; border-bottom: 1px solid var(--border); }
 .stage-heading-title { margin: 4px 0 0; font-size: 21px; letter-spacing: -.03em; }
 .stage-heading p { margin: 4px 0 8px; color: var(--text-secondary); font-size: 12px; }
-.stage-tools { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
-.stage-toggle, .stage-focus { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-solid); color: var(--text-secondary); }
-.stage-toggle:hover, .stage-focus:hover, .stage-focus[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent); }
-.stage-toggle small { padding: 2px 6px; border-radius: 999px; background: var(--surface-muted); }
 .stage-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; padding: 15px 17px; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(255,255,255,.72); }
 .stage-summary p { margin: 4px 0; color: var(--text-secondary); font-size: 12px; }
 .event-card { position: relative; z-index: 1; display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(255,255,255,.74); box-shadow: 0 4px 16px rgba(0,0,0,.035); transition: background var(--motion-fast), box-shadow var(--motion-fast), border-color var(--motion-fast); }

@@ -17,7 +17,7 @@ npm run dev
 
 Windows 桌面快捷方式会启动生产服务并自动打开 `http://127.0.0.1:4174`。快捷方式调用 `scripts/start-timeline.ps1`；也可以直接运行 `npm start`。
 
-在应用的“本机设置”中可以修改默认档案目录。服务会把现有档案复制到新目录，之后按 `故事名_存档时间.json` 保存；在应用中按 `Ctrl+S` 可立即保存当前故事。
+在应用的“本机设置”中可以修改默认档案目录。服务会把现有档案复制到新目录，之后按 `故事名_存档时间.json` 保存；应用会在故事变更后自动保存，也可按 `Ctrl+S` 立即保存当前故事。
 
 ## 构建与运行
 
@@ -38,7 +38,7 @@ npm start
 npm run migrate:data
 ```
 
-可从界面导入旧版故事 JSON 或 Markdown。命令行 Markdown 导入示例：
+可从界面导入 Markdown。命令行 Markdown 导入示例：
 
 ```powershell
 npm run import:md -- .\事件记录.md --story <故事ID>
