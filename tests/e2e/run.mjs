@@ -186,13 +186,30 @@ try {
   assert.equal(compendiumArchive[0].details, '已修改图鉴内容');
 
   await page.getByRole('button', { name: '时间线', exact: true }).click();
-  const markdown = '### 2030/05/03 下午 - Markdown 导入事件\n**线路**: 分支:南线\n**地点**: 港口\n**人物**: 人物乙\n\n> Markdown 摘要\n\nMarkdown 正文';
+  const markdown = '### 2030/05/03 下午 - Markdown 导入事件\n**线路**: 分支:南线\n**地点**: 港口\n**人物**: 人物乙\n\n> Markdown 摘要\n\nMarkdown 正文\n\n#### 人物档案\n\n##### 人物乙\n- **内衣款式**: 导入内衣\n- **罩杯**: B\n- **胸围**: 88cm';
   await page.locator('input[type=file][accept*="markdown"]').setInputFiles({ name: 'import.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown) });
   const imported = await waitForArchive(archive => archive.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
   assert(imported.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
+  const importedMarkdownEvent = imported.events.find(event => event.title === 'Markdown 导入事件');
+  assert.equal(importedMarkdownEvent.peopleData['人物乙'].underwear, '导入内衣');
+  assert.equal(importedMarkdownEvent.peopleData['人物乙'].cup, 'B');
   await page.keyboard.press('Control+S');
   await waitForArchive(archive => archive.savedAt);
   assert((await fs.readdir(storiesDir)).some(file => file.startsWith('验收故事_') && file.endsWith('.json')));
+
+  const profileEventDownloadPromise = page.waitForEvent('download');
+  await page.locator('.event-card').filter({ hasText: '新增分支事件' }).getByRole('button', { name: '导出 新增分支事件' }).click();
+  const profileEventDownload = await profileEventDownloadPromise;
+  const profileEventMarkdown = await fs.readFile(await profileEventDownload.path(), 'utf8');
+  assert(profileEventMarkdown.includes('#### 人物档案'));
+  assert(profileEventMarkdown.includes('测试内衣'));
+  const [storyMarkdownDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: '导出 Markdown', exact: true }).click(),
+  ]);
+  const storyMarkdown = await fs.readFile(await storyMarkdownDownload.path(), 'utf8');
+  assert(storyMarkdown.includes('人物丙'));
+  assert(storyMarkdown.includes('测试内衣'));
 
   await page.locator('.stage-summary').filter({ hasText: '第一阶段' }).getByRole('button', { name: '展开阶段' }).click();
   const eventDownloadPromise = page.waitForEvent('download');

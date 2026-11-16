@@ -72,6 +72,8 @@ function parseEvent(header: RegExpMatchArray, body: string[], order: number, bra
   const peopleStart = body.findIndex(line => /^####\s*人物档案/.test(line.trim()));
   const prose = peopleStart < 0 ? body : body.slice(0, peopleStart);
   const content = prose.filter(line => line.trim() && !excluded.test(line.trim())).join('\n').trim();
+  const people = (fields.get('人物') || '').split(/[,，]/).map(name => name.trim()).filter(Boolean);
+  for (const name of Object.keys(personBlocks)) if (!people.includes(name)) people.push(name);
   const event: TimelineEvent = {
     id: `${Date.now()}-${order}`,
     title: header[3].trim(),
@@ -80,7 +82,7 @@ function parseEvent(header: RegExpMatchArray, body: string[], order: number, bra
     location: fields.get('地点') || '',
     summary,
     content,
-    people: (fields.get('人物') || '').split(/[,，]/).map(name => name.trim()).filter(Boolean),
+    people,
     peopleData: Object.fromEntries(Object.entries(personBlocks).map(([name, data]) => [name, normalizeBodyData(data)])),
     order: order + 1,
     branchId,
@@ -96,12 +98,15 @@ function parsePeople(lines: string[]) {
     if (!currentName) return;
     const isNPC = Object.values(fields).some(value => value === 'NPC');
     const dimension = Number((fields['尺寸'] || '').match(/[\d.]+/)?.[0] || 8);
+    const rawAccessories = (fields['特殊饰品'] || '').split(/[,，]/).map(value => value.trim()).filter(Boolean);
+    const cage = fields['笼具'] || rawAccessories[0] || '无';
+    const combinedAccessories = (fields['笼具'] ? rawAccessories : rawAccessories.slice(1)).filter(value => value !== '无' && value !== '未设定');
     result[currentName] = {
       isNPC,
       underwear: fields['内衣款式'] || '未设定', top: fields['上衣'] || '未设定',
       bottom: fields['下装'] || '未设定', socks: fields['袜饰'] || '未设定', shoes: fields['鞋履'] || '未设定',
-      cage: fields['特殊饰品'] || '无', specialAccessories: [], bustSize: Number((fields['胸围'] || '').match(/[\d.]+/)?.[0] || 80),
-      penisState: fields['状态'] || '未勃起', penisLength: fields['尺寸']?.includes('女') ? 0 : dimension,
+      cage, specialAccessories: combinedAccessories.map(type => ({ type })), bustSize: Number((fields['胸围'] || '').match(/[\d.]+/)?.[0] || 80),
+      cup: fields['罩杯'] || 'A', penisState: fields['状态'] || '未勃起', penisLength: fields['尺寸']?.includes('女') ? 0 : dimension,
     };
   };
   for (const line of lines) {

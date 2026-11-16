@@ -159,10 +159,34 @@ function toggleStage(stageId: string) {
 }
 async function saveStages(stages: StoryArchive['semesters']) { if (!story.value) return; stageModal.value = false; await save({ ...story.value, semesters: stages }); }
 
+function renderPeopleProfiles(event: TimelineEvent) {
+  const profiles = event.people.map(name => {
+    const profile = event.peopleData[name];
+    if (!profile) return '';
+    const accessories = profile.specialAccessories.map(item => item.type).join(', ') || '无';
+    return [
+      `##### ${name}`,
+      profile.isNPC ? '- **身份**: NPC' : '',
+      `- **内衣款式**: ${profile.underwear}`,
+      `- **上衣**: ${profile.top}`,
+      `- **下装**: ${profile.bottom}`,
+      `- **袜饰**: ${profile.socks}`,
+      `- **鞋履**: ${profile.shoes}`,
+      `- **笼具**: ${profile.cage}`,
+      `- **特殊饰品**: ${accessories}`,
+      `- **胸围**: ${profile.bustSize}cm`,
+      `- **罩杯**: ${profile.cup}`,
+      `- **状态**: ${profile.penisState}`,
+      `- **尺寸**: ${profile.penisLength}cm`,
+    ].filter(Boolean).join('\n');
+  }).filter(Boolean);
+  return profiles.length ? ['#### 人物档案', ...profiles].join('\n\n') : '';
+}
+
 function exportMarkdown() {
   if (!story.value) return;
   const branchName = (id: string | null) => id ? story.value!.branches.find(branch => branch.id === id)?.name || '未知分支' : '主线';
-  const renderEvent = (event: TimelineEvent) => [`### ${event.date} ${event.time} - ${event.title}`, `**线路**: ${branchName(event.branchId)}`, event.location ? `**地点**: ${event.location}` : '', event.people.length ? `**人物**: ${event.people.join(', ')}` : '', '', event.summary ? `> ${event.summary}` : '', '', event.content, '', '---', ''].join('\n');
+  const renderEvent = (event: TimelineEvent) => [`### ${event.date} ${event.time} - ${event.title}`, `**线路**: ${branchName(event.branchId)}`, event.location ? `**地点**: ${event.location}` : '', event.people.length ? `**人物**: ${event.people.join(', ')}` : '', '', event.summary ? `> ${event.summary}` : '', '', event.content, '', renderPeopleProfiles(event), '', '---', ''].join('\n');
   const sections = [story.value.events.filter(event => !event.branchId).map(renderEvent).join('\n')];
   for (const branch of story.value.branches) { const parent = story.value.events.find(event => String(event.id) === String(branch.parentEventId)); sections.push(`## 结局分支: ${branch.name}${parent ? ` (分歧点: ${parent.title})` : ''}\n\n${story.value.events.filter(event => event.branchId === branch.id).map(renderEvent).join('\n')}`); }
   download(new Blob([sections.join('\n')], { type: 'text/markdown;charset=utf-8' }), `${story.value.storyName}.md`);
@@ -170,13 +194,7 @@ function exportMarkdown() {
 function exportEvent(event: TimelineEvent) {
   if (!story.value) return;
   const branchName = event.branchId ? story.value.branches.find(branch => branch.id === event.branchId)?.name || '未知分支' : '主线';
-  const profiles = event.people.map(name => {
-    const profile = event.peopleData[name];
-    if (!profile) return '';
-    const accessories = profile.specialAccessories.map(item => item.type).join(', ');
-    return [`#### 人物档案`, `##### ${name}`, `- **内衣款式**: ${profile.underwear}`, `- **上衣**: ${profile.top}`, `- **下装**: ${profile.bottom}`, `- **袜饰**: ${profile.socks}`, `- **鞋履**: ${profile.shoes}`, `- **特殊饰品**: ${[profile.cage, accessories].filter(Boolean).join(', ') || '无'}`, `- **胸围**: ${profile.bustSize}cm`, `- **罩杯**: ${profile.cup}`, `- **状态**: ${profile.penisState}`, `- **尺寸**: ${profile.penisLength}cm`].join('\n');
-  }).filter(Boolean).join('\n\n');
-  const markdown = [`### ${event.date} ${event.time} - ${event.title}`, `**线路**: ${branchName}`, `**地点**: ${event.location}`, `**人物**: ${event.people.join(', ')}`, '', event.summary ? `> ${event.summary}` : '', '', event.content, '', profiles, '', '---', ''].join('\n');
+  const markdown = [`### ${event.date} ${event.time} - ${event.title}`, `**线路**: ${branchName}`, `**地点**: ${event.location}`, `**人物**: ${event.people.join(', ')}`, '', event.summary ? `> ${event.summary}` : '', '', event.content, '', renderPeopleProfiles(event), '', '---', ''].join('\n');
   download(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), `${event.title || '事件'}.md`);
 }
 async function importMarkdown(file: File) {

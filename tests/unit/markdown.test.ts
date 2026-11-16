@@ -12,4 +12,18 @@ describe('markdown importer', () => {
     expect(base.events).toHaveLength(0);
     expect(result.story.events[0].content).toBe('正文');
   });
+
+  it('round-trips event body data from the markdown profile block', () => {
+    const base = createEmptyStory('测试');
+    const result = parseMarkdown(`### 2030/03/20 清晨 - 档案事件\n**人物**: 甲\n\n正文\n\n#### 人物档案\n\n##### 甲\n- **身份**: NPC\n- **内衣款式**: 黑色\n- **笼具**: 金属笼\n- **特殊饰品**: 耳机, 项链\n- **胸围**: 92cm\n- **罩杯**: C\n- **状态**: 勃起\n- **尺寸**: 12cm`, base);
+    const profile = result.story.events[0].peopleData['甲'];
+    expect(result.story.events[0].people).toEqual(['甲']);
+    expect(profile.isNPC).toBe(true);
+    expect(profile.underwear).toBe('黑色');
+    expect(profile.cage).toBe('金属笼');
+    expect(profile.specialAccessories).toEqual([{ type: '耳机' }, { type: '项链' }]);
+    expect(profile.bustSize).toBe(92);
+    expect(profile.cup).toBe('C');
+    expect(profile.penisLength).toBe(12);
+  });
 });
