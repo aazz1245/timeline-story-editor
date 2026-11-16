@@ -45,7 +45,7 @@ function submit() {
   const peopleData = Object.fromEntries(people.map(name => {
     const profile = profileFor(name);
     const basePerson = basePersonFor(name);
-    return [name, { ...profile, cup: basePerson ? calculateCup(basePerson.upperBust, basePerson.lowerBust) : profile.cup }];
+    return [name, { ...profile, cup: basePerson ? calculateCup(profile.bustSize, basePerson.lowerBust) : profile.cup }];
   }));
   emit('save', { ...form, branchId, people, peopleData, date: form.date.replaceAll('-', '/'), title: form.title.trim(), summary: form.summary.trim() }, branch);
 }

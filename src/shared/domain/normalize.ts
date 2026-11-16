@@ -23,7 +23,7 @@ export function normalizeStory(input: unknown): StoryArchive {
     ...event,
     peopleData: Object.fromEntries(Object.entries(event.peopleData).map(([name, data]) => {
       const person = mainCharacters.find(item => item.name === name);
-      return [name, person ? { ...data, cup: calculateCup(Number(person.upperBust), Number(person.lowerBust)) } : data];
+      return [name, person ? { ...data, cup: calculateCup(Number(data.bustSize ?? person.upperBust), Number(person.lowerBust)) } : data];
     })),
   }));
   return {

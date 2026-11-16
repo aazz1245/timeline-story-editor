@@ -143,6 +143,8 @@ try {
   assert.equal(await page.locator('#人物甲-bust').inputValue(), '90');
   assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'C');
   assert.equal(await page.locator('.profile-disclosure').first().locator('input[aria-label*="罩杯"]').count(), 0);
+  await page.locator('#人物甲-bust').fill('95');
+  assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'E');
   await page.locator('.body-data-form input:not([type="checkbox"])').first().evaluate(element => { const input = element; input.value = '测试内衣'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   const npcToggle = page.locator('.profile-disclosure').first().getByRole('checkbox');
   await npcToggle.check();
@@ -158,6 +160,7 @@ try {
   assert.equal(newBranch.parentEventId, 'e2');
   assert.equal(saved.events.find(event => event.title === '新增分支事件').branchId, newBranch.id);
   assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物甲'].underwear, '测试内衣');
+  assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物甲'].cup, 'E');
 
   await page.getByRole('button', { name: '时间流', exact: true }).click();
   assert(await page.locator('.flow-board').isVisible());

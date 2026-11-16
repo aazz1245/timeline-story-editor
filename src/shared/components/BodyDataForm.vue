@@ -14,7 +14,7 @@ const accessories = computed({
   get: () => draft.specialAccessories.map(item => item.type).join(', '),
   set: value => { draft.specialAccessories = value.split(/[,，]/).map(item => item.trim()).filter(Boolean).map(type => ({ type })); },
 });
-const calculatedCup = computed(() => props.basePerson ? calculateCup(props.basePerson.upperBust, props.basePerson.lowerBust) : draft.cup);
+const calculatedCup = computed(() => props.basePerson ? calculateCup(draft.bustSize, props.basePerson.lowerBust) : draft.cup);
 </script>
 
 <template>
