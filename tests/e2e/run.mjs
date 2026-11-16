@@ -128,8 +128,7 @@ try {
   assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第一阶段' }).getAttribute('aria-expanded'), 'true');
   assert.equal(await page.locator('.stage-toggle').filter({ hasText: '第二阶段' }).getAttribute('aria-expanded'), 'false');
   const march = page.locator('.month-section').filter({ hasText: '2030年03月' });
-  assert.equal(await march.locator('.month-header').getAttribute('aria-expanded'), 'false');
-  await march.locator('.month-header').click();
+  assert.equal(await march.locator('.month-header').getAttribute('aria-expanded'), 'true');
   assert.equal(await march.locator('.event-card').count(), 2);
 
   await page.getByRole('button', { name: '新建事件' }).click();

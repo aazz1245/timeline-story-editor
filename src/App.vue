@@ -117,6 +117,15 @@ function toggleStage(stageId: string) {
     // Only one stage is visible at a time so an older stage cannot leave
     // newer content visible alongside it.
     story.value?.semesters.filter(stage => stage.id !== stageId).forEach(stage => next.add(stage.id));
+    const stage = story.value?.semesters.find(item => item.id === stageId);
+    const stageMonths = story.value?.events
+      .filter(event => stage && event.date >= stage.startDate && event.date <= stage.endDate)
+      .map(event => event.date.slice(0, 7)) || [];
+    const latestStageMonth = [...new Set(stageMonths)].sort().at(-1);
+    if (latestStageMonth) {
+      const allMonths = new Set(story.value?.events.map(event => event.date.slice(0, 7)) || []);
+      collapsedMonths.value = new Set([...allMonths].filter(month => month !== latestStageMonth));
+    }
   } else {
     story.value?.semesters.forEach(stage => next.add(stage.id));
   }
