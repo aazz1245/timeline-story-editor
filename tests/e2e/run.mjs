@@ -74,16 +74,12 @@ try {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.waitForSelector('.app-shell');
   assert(await page.locator('.sidebar').isVisible());
-  await page.getByRole('button', { name: /快捷操作/ }).click();
-  assert(await page.getByRole('dialog', { name: '快捷操作' }).isVisible());
-  const searchShortcut = page.locator('.shortcut-row').filter({ hasText: '搜索事件' });
-  assert.equal(await searchShortcut.count(), 1);
-  await searchShortcut.click();
-  assert.equal(await page.locator('input[aria-label="搜索事件"]').evaluate(element => document.activeElement === element), true);
-  await page.keyboard.press('Escape');
-  assert.equal(await page.getByRole('dialog', { name: '快捷操作' }).count(), 0);
-  await page.keyboard.press('Control+K');
-  assert.equal(await page.locator('input[aria-label="搜索事件"]').evaluate(element => document.activeElement === element), true);
+  await page.getByRole('button', { name: '收起侧边栏' }).click();
+  assert(await page.locator('.app-shell').evaluate(element => element.classList.contains('sidebar-collapsed')));
+  await page.getByRole('button', { name: '展开侧边栏' }).click();
+  await page.getByRole('button', { name: '本机设置' }).click();
+  assert(await page.getByRole('dialog', { name: '本机设置' }).isVisible());
+  await page.getByRole('dialog', { name: '本机设置' }).getByText('关闭', { exact: true }).click();
   assert.equal(await page.locator('.event-card').count(), 2);
   assert.equal(await page.locator('.stage-summary').count(), 1);
   const may = page.locator('.month-section').filter({ hasText: '2030年05月' });
@@ -122,6 +118,7 @@ try {
   await page.locator('#branch-parent').selectOption('e2');
   await page.locator('#event-summary').fill('由浏览器验收创建');
   await page.locator('#event-people').fill('人物丙');
+  await page.locator('.body-data-form input:not([type="checkbox"])').first().evaluate(element => { const input = element; input.value = '测试内衣'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.getByRole('button', { name: '保存事件' }).click();
   await page.getByRole('heading', { name: '新增分支事件' }).waitFor();
   const saved = await waitForArchive(archivePath, archive => archive.events.length === 5);
@@ -130,19 +127,36 @@ try {
   const newBranch = saved.branches.find(branch => branch.name === '南线');
   assert.equal(newBranch.parentEventId, 'e2');
   assert.equal(saved.events.find(event => event.title === '新增分支事件').branchId, newBranch.id);
+  assert.equal(saved.events.find(event => event.title === '新增分支事件').peopleData['人物丙'].underwear, '测试内衣');
 
-  await page.getByRole('button', { name: '分支', exact: true }).click();
-  assert(await page.locator('.branch-card').filter({ hasText: '南线' }).isVisible());
-  await page.getByRole('button', { name: '人物', exact: true }).click();
-  assert(await page.locator('.person-card').filter({ hasText: '人物丙' }).isVisible());
+  await page.getByRole('button', { name: '时间流', exact: true }).click();
+  assert(await page.locator('.flow-board').isVisible());
+  assert(await page.locator('.flow-line').count() >= 2);
+  await page.getByRole('button', { name: '人物身体数据', exact: true }).click();
+  assert(await page.locator('.body-table').isVisible());
   await page.getByRole('button', { name: '图鉴', exact: true }).click();
   assert(await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).isVisible());
+  await page.locator('.compendium-card').filter({ hasText: '测试联络器' }).getByRole('button', { name: '编辑图鉴 测试联络器' }).click();
+  await page.locator('#compendium-details').fill('已修改图鉴内容');
+  await page.getByRole('button', { name: '保存条目' }).click();
+  let compendiumArchive;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    compendiumArchive = JSON.parse(await fs.readFile(path.join(dataDir, 'compendium.json'), 'utf8'));
+    if (compendiumArchive[0]?.details === '已修改图鉴内容') break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(compendiumArchive[0].details, '已修改图鉴内容');
 
   await page.getByRole('button', { name: '时间线', exact: true }).click();
   const markdown = '### 2030/05/03 下午 - Markdown 导入事件\n**线路**: 分支:南线\n**地点**: 港口\n**人物**: 人物乙\n\n> Markdown 摘要\n\nMarkdown 正文';
   await page.locator('input[type=file][accept*="markdown"]').setInputFiles({ name: 'import.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown) });
   const imported = await waitForArchive(archivePath, archive => archive.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
   assert(imported.events.some(event => event.title === 'Markdown 导入事件' && event.branchId === newBranch.id));
+
+  const eventDownloadPromise = page.waitForEvent('download');
+  await page.locator('.event-card').filter({ hasText: '测试起点' }).getByRole('button', { name: '导出 测试起点' }).click();
+  const eventDownload = await eventDownloadPromise;
+  assert(eventDownload.suggestedFilename().endsWith('.md'));
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出 JSON' }).click();
@@ -177,7 +191,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.screenshot({ path: path.join(dataDir, 'mobile.png'), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log('PASS archive API, month/stage folding, ordered same-day events, event overlays, story/event/stage CRUD, branches, people, compendium, Markdown/JSON and mobile layout');
+  console.log('PASS archive API, month/stage folding, ordered same-day events, event overlays, story/event/stage CRUD, timeline flow, body data, compendium editing, Markdown/JSON, single-event export and mobile layout');
 } finally {
   await browser?.close();
   server.kill();

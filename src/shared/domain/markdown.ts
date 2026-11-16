@@ -1,4 +1,4 @@
-import { normalizeDate, normalizeStory } from './normalize';
+import { normalizeBodyData, normalizeDate, normalizeStory } from './normalize';
 import type { MarkdownImportResult, StoryArchive, TimelineBranch, TimelineEvent } from '../types';
 
 const eventHeading = /^###\s+(\d{4}[/-]\d{1,2}[/-]\d{1,2})(?:\s+(.+?))?\s+-\s*(.+)$/;
@@ -81,7 +81,7 @@ function parseEvent(header: RegExpMatchArray, body: string[], order: number, bra
     summary,
     content,
     people: (fields.get('人物') || '').split(/[,，]/).map(name => name.trim()).filter(Boolean),
-    peopleData: personBlocks,
+    peopleData: Object.fromEntries(Object.entries(personBlocks).map(([name, data]) => [name, normalizeBodyData(data)])),
     order: order + 1,
     branchId,
   };

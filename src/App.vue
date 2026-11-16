@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { PhDownloadSimple, PhFileArrowUp, PhFileText, PhMagnifyingGlass, PhPlus, PhUploadSimple, PhCommand } from '@phosphor-icons/vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { PhDownloadSimple, PhFileArrowUp, PhFileText, PhMagnifyingGlass, PhPlus, PhUploadSimple } from '@phosphor-icons/vue';
 import { api } from './shared/api';
 import { parseMarkdown } from './shared/domain/markdown';
 import { createEmptyStory, normalizeStory } from './shared/domain/normalize';
@@ -8,11 +8,11 @@ import type { StoryArchive, StorySummary, TimelineEvent, CompendiumItem } from '
 import StorySidebar from './features/stories/StorySidebar.vue';
 import TimelineBoard from './features/timeline/TimelineBoard.vue';
 import EventModal from './features/events/EventModal.vue';
-import BranchBoard from './features/branches/BranchBoard.vue';
+import TimelineFlowBoard from './features/timeline/TimelineFlowBoard.vue';
 import PeopleBoard from './features/people/PeopleBoard.vue';
 import CompendiumBoard from './features/compendium/CompendiumBoard.vue';
 import StageSettingsModal from './features/timeline/StageSettingsModal.vue';
-import ShortcutPanel from './shared/components/ShortcutPanel.vue';
+import LocalSettingsModal from './shared/components/LocalSettingsModal.vue';
 
 const stories = ref<StorySummary[]>([]);
 const selectedId = ref('');
@@ -25,13 +25,13 @@ const modalEvent = ref<TimelineEvent | null | undefined>(undefined);
 const notice = ref('');
 const fileInput = ref<HTMLInputElement>();
 const jsonInput = ref<HTMLInputElement>();
-const view = ref<'timeline' | 'branches' | 'people' | 'compendium'>('timeline');
+const view = ref<'timeline' | 'flow' | 'people' | 'compendium'>('timeline');
 const compendium = ref<CompendiumItem[]>([]);
 const collapsedStages = ref<Set<string>>(new Set());
 const focusedStageId = ref<string | null>(null);
 const stageModal = ref(false);
-const shortcutOpen = ref(false);
-const searchInput = ref<HTMLInputElement>();
+const sidebarCollapsed = ref(false);
+const settingsOpen = ref(false);
 
 const sortedEvents = computed(() => story.value?.events || []);
 const currentMonth = computed(() => sortedEvents.value.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.date.slice(0, 7));
@@ -123,6 +123,18 @@ function exportMarkdown() {
   for (const branch of story.value.branches) { const parent = story.value.events.find(event => String(event.id) === String(branch.parentEventId)); sections.push(`## 结局分支: ${branch.name}${parent ? ` (分歧点: ${parent.title})` : ''}\n\n${story.value.events.filter(event => event.branchId === branch.id).map(renderEvent).join('\n')}`); }
   download(new Blob([sections.join('\n')], { type: 'text/markdown;charset=utf-8' }), `${story.value.storyName}.md`);
 }
+function exportEvent(event: TimelineEvent) {
+  if (!story.value) return;
+  const branchName = event.branchId ? story.value.branches.find(branch => branch.id === event.branchId)?.name || '未知分支' : '主线';
+  const profiles = event.people.map(name => {
+    const profile = event.peopleData[name];
+    if (!profile) return '';
+    const accessories = profile.specialAccessories.map(item => item.type).join(', ');
+    return [`#### 人物档案`, `##### ${name}`, `- **内衣款式**: ${profile.underwear}`, `- **上衣**: ${profile.top}`, `- **下装**: ${profile.bottom}`, `- **袜饰**: ${profile.socks}`, `- **鞋履**: ${profile.shoes}`, `- **特殊饰品**: ${[profile.cage, accessories].filter(Boolean).join(', ') || '无'}`, `- **胸围**: ${profile.bustSize}cm`, `- **罩杯**: ${profile.cup}`, `- **状态**: ${profile.penisState}`, `- **尺寸**: ${profile.penisLength}cm`].join('\n');
+  }).filter(Boolean).join('\n\n');
+  const markdown = [`### ${event.date} ${event.time} - ${event.title}`, `**线路**: ${branchName}`, `**地点**: ${event.location}`, `**人物**: ${event.people.join(', ')}`, '', event.summary ? `> ${event.summary}` : '', '', event.content, '', profiles, '', '---', ''].join('\n');
+  download(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), `${event.title || '事件'}.md`);
+}
 async function importJson(file: File) {
   const imported = normalizeStory(JSON.parse(await file.text()));
   if (!story.value) { const created = await api.importStory(imported); await refreshStories(false); await loadStory(created.storyId); }
@@ -137,55 +149,28 @@ async function importMarkdown(file: File) {
 function download(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
 function exportCompendium() { download(new Blob([JSON.stringify(compendium.value, null, 2)], { type: 'application/json' }), 'compendium.json'); }
 async function importCompendium(file: File) { const data = JSON.parse(await file.text()); if (!Array.isArray(data)) return; compendium.value = data; await api.saveCompendium(data); notice.value = `已导入 ${data.length} 项图鉴`; }
+async function saveCompendium(items: CompendiumItem[]) { compendium.value = items; await api.saveCompendium(items); notice.value = '图鉴已保存'; setTimeout(() => { notice.value = ''; }, 2200); }
 function openFile(kind: 'md' | 'json') { (kind === 'md' ? fileInput : jsonInput).value?.click(); }
-function openShortcuts() { shortcutOpen.value = true; }
-function focusSearch() { shortcutOpen.value = false; view.value = 'timeline'; requestAnimationFrame(() => searchInput.value?.focus()); }
-function runShortcut(action: 'newEvent' | 'search' | 'importMarkdown' | 'importJson' | 'exportMarkdown' | 'exportJson' | 'stageSettings') {
-  shortcutOpen.value = false;
-  if (action === 'newEvent') modalEvent.value = null;
-  if (action === 'search') focusSearch();
-  if (action === 'importMarkdown') openFile('md');
-  if (action === 'importJson') openFile('json');
-  if (action === 'exportMarkdown') exportMarkdown();
-  if (action === 'exportJson') exportJson();
-  if (action === 'stageSettings' && view.value === 'timeline') stageModal.value = true;
-}
-function setView(next: string) { if (['timeline', 'branches', 'people', 'compendium'].includes(next)) view.value = next as typeof view.value; }
+function setView(next: string) { if (['timeline', 'flow', 'people', 'compendium'].includes(next)) view.value = next as typeof view.value; }
 async function onFile(event: Event, kind: 'md' | 'json') { const file = (event.target as HTMLInputElement).files?.[0]; if (file) await (kind === 'md' ? importMarkdown(file) : importJson(file)); (event.target as HTMLInputElement).value = ''; }
-function handleGlobalKeydown(event: KeyboardEvent) {
-  const target = event.target as HTMLElement | null;
-  const typing = target?.matches('input, textarea, select, [contenteditable="true"]');
-  const modKey = event.ctrlKey || event.metaKey;
-  if (event.key === '?' && !typing) { event.preventDefault(); openShortcuts(); return; }
-  if (event.key === 'Escape' && shortcutOpen.value) { event.preventDefault(); shortcutOpen.value = false; return; }
-  if (event.key.toLowerCase() === 'n' && !typing && !modKey) { event.preventDefault(); modalEvent.value = null; return; }
-  if (modKey && event.key.toLowerCase() === 'k') { event.preventDefault(); focusSearch(); return; }
-  if (modKey && event.shiftKey && event.key.toLowerCase() === 'm') { event.preventDefault(); openFile('md'); return; }
-  if (modKey && event.shiftKey && event.key.toLowerCase() === 'j') { event.preventDefault(); openFile('json'); return; }
-  if (modKey && event.altKey && event.key.toLowerCase() === 'm') { event.preventDefault(); exportMarkdown(); return; }
-  if (modKey && event.altKey && event.key.toLowerCase() === 'j') { event.preventDefault(); exportJson(); return; }
-  if (modKey && event.shiftKey && event.key.toLowerCase() === 's' && view.value === 'timeline') { event.preventDefault(); stageModal.value = true; }
-}
 
-onMounted(async () => { window.addEventListener('keydown', handleGlobalKeydown); try { await refreshStories(); if (stories.value[0]) await loadStory(stories.value[0].storyId); compendium.value = await api.compendium(); } catch (error) { notice.value = error instanceof Error ? error.message : '服务未启动'; } finally { loading.value = false; } });
-onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown));
+onMounted(async () => { try { await refreshStories(); if (stories.value[0]) await loadStory(stories.value[0].storyId); compendium.value = await api.compendium(); } catch (error) { notice.value = error instanceof Error ? error.message : '服务未启动'; } finally { loading.value = false; } });
 watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); });
 </script>
 
 <template>
-  <div class="app-shell">
-    <StorySidebar :stories="stories" :selected-id="selectedId" :loading="loading" @select="selectedId = $event" @create="createStory" @rename="renameStory" @remove="removeStory" @settings="notice = '档案保存于本机 data/stories'" />
+  <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <StorySidebar :stories="stories" :selected-id="selectedId" :loading="loading" :collapsed="sidebarCollapsed" @select="selectedId = $event" @create="createStory" @rename="renameStory" @remove="removeStory" @toggle="sidebarCollapsed = !sidebarCollapsed" @settings="settingsOpen = true" />
     <main class="workspace">
       <header class="topbar">
-        <div><h1>{{ story?.storyName || '故事时间线' }}</h1><p>{{ story ? `${story.events.length} 个事件 · ${branchCount} 条分支` : '本机故事工作区' }}</p></div>
+        <div><h1>{{ story?.storyName || '故事时间线' }}</h1><p>{{ story ? `${story.events.length} 个事件 · ${branchCount + 1} 条线路` : '本机故事工作区' }}</p></div>
         <div class="toolbar">
-          <label class="btn" title="搜索事件"><PhMagnifyingGlass :size="18" aria-hidden="true" /><input ref="searchInput" v-model="query" aria-label="搜索事件" placeholder="搜索事件" style="width: 120px; border: 0; outline: 0; background: transparent;" /></label>
+          <label class="btn" title="搜索事件"><PhMagnifyingGlass :size="18" aria-hidden="true" /><input v-model="query" aria-label="搜索事件" placeholder="搜索事件" style="width: 120px; border: 0; outline: 0; background: transparent;" /></label>
           <button class="btn" type="button" @click="openFile('md')"><PhUploadSimple :size="18" aria-hidden="true" /><span>导入 Markdown</span></button>
           <button class="btn" type="button" @click="openFile('json')"><PhFileArrowUp :size="18" aria-hidden="true" /><span>加载 JSON</span></button>
           <button class="btn" type="button" :disabled="!story" @click="exportMarkdown"><PhFileText :size="18" aria-hidden="true" /><span>导出 Markdown</span></button>
           <button class="btn" type="button" @click="exportJson"><PhDownloadSimple :size="18" aria-hidden="true" /><span>导出 JSON</span></button>
           <button v-if="view === 'timeline'" class="btn" type="button" @click="stageModal = true"><span>阶段设置</span></button>
-          <button class="btn shortcut-trigger" type="button" aria-haspopup="dialog" aria-controls="shortcut-panel" @click="openShortcuts"><PhCommand :size="18" aria-hidden="true" /><span>快捷操作</span><kbd>?</kbd></button>
           <button class="btn primary" type="button" @click="modalEvent = null"><PhPlus :size="18" aria-hidden="true" /><span>新建事件</span></button>
           <input ref="fileInput" type="file" accept=".md,.markdown,text/markdown" hidden @change="onFile($event, 'md')" />
           <input ref="jsonInput" type="file" accept=".json,application/json" hidden @change="onFile($event, 'json')" />
@@ -195,21 +180,21 @@ watch(selectedId, id => { if (id && id !== story.value?.storyId) loadStory(id); 
       <div v-if="loading" class="loading">正在读取本机故事…</div>
       <div v-else-if="!story" class="content"><div class="empty-state"><strong>本机还没有故事档案</strong><div>新建故事，或从旧版 JSON 档案开始。</div><div class="toolbar" style="justify-content:center; margin-top:16px;"><button class="btn primary" type="button" @click="createStory"><PhPlus :size="17" aria-hidden="true" />新建故事</button><button class="btn" type="button" @click="openFile('json')"><PhFileArrowUp :size="17" aria-hidden="true" />导入旧版 JSON</button></div></div></div>
       <div v-else class="content">
-        <nav class="view-tabs" aria-label="工作区视图"><button v-for="tab in [{ id: 'timeline', label: '时间线' }, { id: 'branches', label: '分支' }, { id: 'people', label: '人物' }, { id: 'compendium', label: '图鉴' }]" :key="tab.id" class="view-tab" :class="{ active: view === tab.id }" type="button" :aria-current="view === tab.id ? 'page' : undefined" @click="setView(tab.id)">{{ tab.label }}</button></nav>
+        <nav class="view-tabs" aria-label="工作区视图"><button v-for="tab in [{ id: 'timeline', label: '时间线' }, { id: 'flow', label: '时间流' }, { id: 'people', label: '人物身体数据' }, { id: 'compendium', label: '图鉴' }]" :key="tab.id" class="view-tab" :class="{ active: view === tab.id }" type="button" :aria-current="view === tab.id ? 'page' : undefined" @click="setView(tab.id)">{{ tab.label }}</button></nav>
         <section v-if="view === 'timeline'" class="summary-strip" aria-label="故事概览">
           <div class="summary-card"><span>事件</span><strong>{{ story.events.length }}</strong></div>
-          <div class="summary-card"><span>分支</span><strong>{{ branchCount }}</strong></div>
+          <div class="summary-card"><span>线路</span><strong>{{ branchCount + 1 }}</strong></div>
           <div class="summary-card"><span>人物</span><strong>{{ peopleCount }}</strong></div>
           <div class="summary-card"><span>最新月份</span><strong>{{ currentMonth || '—' }}</strong></div>
         </section>
-        <TimelineBoard v-if="view === 'timeline'" :events="sortedEvents" :branches="story.branches" :stages="story.semesters" :collapsed-months="collapsedMonths" :collapsed-stages="collapsedStages" :focused-stage-id="focusedStageId" :query="query" @toggle-month="toggleMonth" @toggle-stage="toggleStage" @focus-stage="focusStage" @edit="modalEvent = $event" @delete="deleteEvent" @select="modalEvent = $event" />
-        <BranchBoard v-else-if="view === 'branches'" :events="story.events" :branches="story.branches" @create="createBranch" @select="modalEvent = $event" />
+        <TimelineBoard v-if="view === 'timeline'" :events="sortedEvents" :branches="story.branches" :stages="story.semesters" :collapsed-months="collapsedMonths" :collapsed-stages="collapsedStages" :focused-stage-id="focusedStageId" :query="query" @toggle-month="toggleMonth" @toggle-stage="toggleStage" @focus-stage="focusStage" @edit="modalEvent = $event" @delete="deleteEvent" @select="modalEvent = $event" @export="exportEvent" />
+        <TimelineFlowBoard v-else-if="view === 'flow'" :events="story.events" :branches="story.branches" :stages="story.semesters" @select="modalEvent = $event" @edit="modalEvent = $event" @export="exportEvent" />
         <PeopleBoard v-else-if="view === 'people'" :story="story" @save="save" />
-        <CompendiumBoard v-else :items="compendium" @import="importCompendium" @export="exportCompendium" />
+        <CompendiumBoard v-else :items="compendium" @import="importCompendium" @export="exportCompendium" @save="saveCompendium" />
       </div>
     </main>
     <EventModal v-if="modalEvent !== undefined" :event="modalEvent" :branches="story?.branches || []" :events="story?.events || []" @close="modalEvent = undefined" @save="saveEvent" />
     <StageSettingsModal v-if="stageModal" :stages="story?.semesters || []" @close="stageModal = false" @save="saveStages" />
-    <ShortcutPanel :open="shortcutOpen" @close="shortcutOpen = false" @new-event="runShortcut('newEvent')" @search="runShortcut('search')" @import-markdown="runShortcut('importMarkdown')" @import-json="runShortcut('importJson')" @export-markdown="runShortcut('exportMarkdown')" @export-json="runShortcut('exportJson')" @stage-settings="runShortcut('stageSettings')" />
+    <LocalSettingsModal v-if="settingsOpen" data-directory="本机 data/stories 与 data/compendium.json" @close="settingsOpen = false" @refresh="refreshStories(); story && loadStory(story.storyId)" />
   </div>
 </template>

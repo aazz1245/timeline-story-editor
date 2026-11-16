@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import type { TimelineBranch, TimelineEvent } from '../../shared/types';
+import { createDefaultBodyData } from '../../shared/domain/normalize';
 import ModalShell from '../../shared/components/ModalShell.vue';
+import BodyDataForm from '../../shared/components/BodyDataForm.vue';
 
 const props = defineProps<{ event: TimelineEvent | null; branches: TimelineBranch[]; events: TimelineEvent[] }>();
 const emit = defineEmits<{ close: []; save: [event: TimelineEvent, branch?: TimelineBranch] }>();
@@ -10,12 +12,18 @@ const createBranchOption = '__create_branch__';
 const newBranchName = ref('');
 const branchParent = ref('');
 const peopleInput = ref('');
+const peopleNames = computed(() => peopleInput.value.split(/[,，]/).map(name => name.trim()).filter(Boolean));
+function profileFor(name: string) {
+  if (!form.peopleData[name]) form.peopleData[name] = createDefaultBodyData();
+  return form.peopleData[name];
+}
 watch(() => props.event, event => {
   Object.assign(form, event ? JSON.parse(JSON.stringify(event)) : { id: crypto.randomUUID(), title: '', date: new Date().toISOString().slice(0, 10).replaceAll('-', '/'), time: '上午', location: '', summary: '', content: '', people: [], peopleData: {}, order: 0, branchId: null });
   peopleInput.value = (event?.people || []).join(', ');
   newBranchName.value = '';
   branchParent.value = '';
 }, { immediate: true });
+watch(peopleNames, names => names.forEach(profileFor), { immediate: true });
 function submit() {
   let branch: TimelineBranch | undefined;
   let branchId = form.branchId;
@@ -24,7 +32,9 @@ function submit() {
     branch = { id: `branch-${crypto.randomUUID()}`, name: newBranchName.value.trim(), parentEventId: branchParent.value || null };
     branchId = branch.id;
   }
-  emit('save', { ...form, branchId, people: peopleInput.value.split(/[,，]/).map(name => name.trim()).filter(Boolean), date: form.date.replaceAll('-', '/'), title: form.title.trim(), summary: form.summary.trim() }, branch);
+  const people = [...peopleNames.value];
+  const peopleData = Object.fromEntries(people.map(name => [name, profileFor(name)]));
+  emit('save', { ...form, branchId, people, peopleData, date: form.date.replaceAll('-', '/'), title: form.title.trim(), summary: form.summary.trim() }, branch);
 }
 </script>
 
@@ -39,6 +49,13 @@ function submit() {
           <div class="field"><label for="event-location">地点</label><input id="event-location" v-model="form.location" /></div>
           <div class="field full"><label for="event-summary">摘要</label><input id="event-summary" v-model="form.summary" /></div>
           <div class="field full"><label for="event-people">人物</label><input id="event-people" v-model="peopleInput" placeholder="用逗号分隔人物名称" /></div>
+          <div v-if="peopleNames.length" class="field full profile-section">
+            <div class="profile-section-heading"><strong>人物档案</strong><small>保存本事件中每个人物的身体与穿着数据</small></div>
+            <section v-for="person in peopleNames" :key="person" class="profile-disclosure">
+              <div class="profile-disclosure-title">{{ person }}</div>
+              <BodyDataForm v-model="form.peopleData[person]" :person-name="person" compact />
+            </section>
+          </div>
           <template v-if="form.branchId === createBranchOption">
             <div class="field"><label for="branch-name">新分支名称</label><input id="branch-name" v-model="newBranchName" required /></div>
             <div class="field"><label for="branch-parent">从哪个事件分出</label><select id="branch-parent" v-model="branchParent"><option value="">暂不关联</option><option v-for="item in events" :key="String(item.id)" :value="String(item.id)">{{ item.date }} · {{ item.title }}</option></select></div>

@@ -1,4 +1,4 @@
-import type { StoryArchive, TimelineBranch, TimelineEvent } from '../types';
+import type { StoryArchive, TimelineBodyData, TimelineBranch, TimelineEvent } from '../types';
 
 const emptyStory = (storyName = '未命名故事', storyId: string = crypto.randomUUID()): StoryArchive => ({
   storyId,
@@ -55,7 +55,10 @@ function normalizeEvent(raw: unknown, index: number): TimelineEvent {
   if (!isRecord(raw)) throw new Error(`第 ${index + 1} 个事件格式错误`);
   const id = raw.id ?? `${Date.now()}-${index}`;
   const people = Array.isArray(raw.people) ? raw.people.map(String) : [];
-  const peopleData = isRecord(raw.peopleData) ? raw.peopleData : {};
+  const peopleData: Record<string, TimelineBodyData> = {};
+  if (isRecord(raw.peopleData)) {
+    for (const [name, data] of Object.entries(raw.peopleData)) peopleData[name] = normalizeBodyData(data);
+  }
   return {
     id: typeof id === 'number' ? id : String(id),
     title: String(raw.title ?? '未命名事件'),
@@ -68,6 +71,46 @@ function normalizeEvent(raw: unknown, index: number): TimelineEvent {
     peopleData,
     order: Number(raw.order ?? index + 1),
     branchId: raw.branchId == null || raw.branchId === '' ? null : String(raw.branchId),
+  };
+}
+
+export function createDefaultBodyData(isNPC = false): TimelineBodyData {
+  return {
+    isNPC,
+    underwear: '未设定',
+    top: '未设定',
+    bottom: '未设定',
+    socks: '未设定',
+    shoes: '未设定',
+    cage: '无',
+    specialAccessories: [],
+    bustSize: 80,
+    cup: 'A',
+    penisState: '未勃起',
+    penisLength: 8,
+  };
+}
+
+export function normalizeBodyData(raw: unknown): TimelineBodyData {
+  const data = createDefaultBodyData();
+  if (!isRecord(raw)) return data;
+  return {
+    ...data,
+    ...raw,
+    isNPC: raw.isNPC === true,
+    underwear: String(raw.underwear ?? data.underwear),
+    top: String(raw.top ?? data.top),
+    bottom: String(raw.bottom ?? data.bottom),
+    socks: String(raw.socks ?? data.socks),
+    shoes: String(raw.shoes ?? data.shoes),
+    cage: String(raw.cage ?? data.cage),
+    bustSize: Number(raw.bustSize ?? data.bustSize),
+    cup: String(raw.cup ?? data.cup),
+    penisState: String(raw.penisState ?? data.penisState),
+    penisLength: Number(raw.penisLength ?? data.penisLength),
+    specialAccessories: Array.isArray(raw.specialAccessories)
+      ? raw.specialAccessories.map(item => typeof item === 'string' ? { type: item } : isRecord(item) ? { type: String(item.type ?? '') } : null).filter((item): item is { type: string } => !!item && !!item.type)
+      : [],
   };
 }
 

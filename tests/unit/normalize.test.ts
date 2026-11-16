@@ -9,4 +9,12 @@ describe('story normalization', () => {
     expect(story.branches).toEqual([]);
     expect(story.mainCharacters).toEqual([]);
   });
+
+  it('preserves legacy event body data with stable defaults', () => {
+    const story = normalizeStory({ storyId: 'body-data', events: [{ id: 'e1', title: '档案', date: '2030/01/01', people: ['甲'], peopleData: { 甲: { underwear: '测试内衣', bustSize: 92, specialAccessories: ['耳机'] } } }] });
+    expect(story.events[0].peopleData['甲'].underwear).toBe('测试内衣');
+    expect(story.events[0].peopleData['甲'].bustSize).toBe(92);
+    expect(story.events[0].peopleData['甲'].specialAccessories).toEqual([{ type: '耳机' }]);
+    expect(story.events[0].peopleData['甲'].penisState).toBe('未勃起');
+  });
 });

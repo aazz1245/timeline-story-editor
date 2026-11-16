@@ -1,8 +1,8 @@
 # 故事时间线
 
-本机运行的故事、人物与分支管理工具。Vue 3、TypeScript 和 Vite 提供界面，Node 服务将档案保存到被 Git 忽略的 `data/` 目录。
+本机运行的故事、人物身体数据、时间线与时间流管理工具。Vue 3、TypeScript 和 Vite 提供界面，Node 服务将档案保存到被 Git 忽略的 `data/` 目录。
 
-源码按职责拆分在 `src/features/`（故事、事件、时间线、分支、人物、图鉴）和 `src/shared/`（类型、API、解析、通用 UI）中。应用入口是 `src/main.ts`，旧版单 HTML 只作为本机遗留文件保留，不参与构建。
+源码按职责拆分在 `src/features/`（故事、事件、时间线、时间流、人物、图鉴）和 `src/shared/`（类型、API、解析、通用 UI）中。应用入口是 `src/main.ts`，旧版单 HTML 只作为本机遗留文件保留，不参与构建。
 
 Markdown 导入格式见 [`docs/story-format.md`](docs/story-format.md) 与 [`docs/branch-format.md`](docs/branch-format.md)。
 

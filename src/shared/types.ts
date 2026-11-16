@@ -1,8 +1,31 @@
 export type EventId = string | number;
 
+export interface TimelineBodyData {
+  isNPC: boolean;
+  underwear: string;
+  top: string;
+  bottom: string;
+  socks: string;
+  shoes: string;
+  cage: string;
+  specialAccessories: Array<{ type: string }>;
+  bustSize: number;
+  cup: string;
+  penisState: string;
+  penisLength: number;
+  [key: string]: unknown;
+}
+
 export interface TimelinePerson {
   name: string;
   notes?: string;
+  height?: number;
+  upperBust?: number;
+  lowerBust?: number;
+  waist?: number;
+  hip?: number;
+  penisNormal?: number | null;
+  penisErect?: number | null;
   [key: string]: unknown;
 }
 
@@ -15,7 +38,7 @@ export interface TimelineEvent {
   summary: string;
   content: string;
   people: string[];
-  peopleData: Record<string, Record<string, unknown>>;
+  peopleData: Record<string, TimelineBodyData>;
   order: number;
   branchId: string | null;
 }

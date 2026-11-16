@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { PhCaretDown, PhCaretRight, PhGitBranch, PhMapPin, PhPencilSimple, PhTrash } from '@phosphor-icons/vue';
+import { PhCaretDown, PhCaretRight, PhExport, PhGitBranch, PhMapPin, PhPencilSimple, PhTrash } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import type { StoryPeriod, TimelineBranch, TimelineEvent } from '../../shared/types';
 
 const props = defineProps<{ events: TimelineEvent[]; branches: TimelineBranch[]; stages: StoryPeriod[]; collapsedMonths: Set<string>; collapsedStages: Set<string>; focusedStageId: string | null; query: string }>();
-const emit = defineEmits<{ edit: [event: TimelineEvent]; delete: [event: TimelineEvent]; toggleMonth: [month: string]; toggleStage: [stageId: string]; focusStage: [stageId: string | null]; select: [event: TimelineEvent] }>();
+const emit = defineEmits<{ edit: [event: TimelineEvent]; delete: [event: TimelineEvent]; export: [event: TimelineEvent]; toggleMonth: [month: string]; toggleStage: [stageId: string]; focusStage: [stageId: string | null]; select: [event: TimelineEvent] }>();
 const expandedEvents = ref(new Set<string>());
 
 const branchMap = computed(() => new Map(props.branches.map(branch => [branch.id, branch.name])));
@@ -71,6 +71,7 @@ function toggleDetails(event: TimelineEvent) {
                 </button>
                 <div class="event-actions">
                   <button class="icon-btn" type="button" :aria-label="`${expandedEvents.has(String(event.id)) ? '收起' : '展开'} ${event.title} 详情`" :aria-expanded="expandedEvents.has(String(event.id))" @click="toggleDetails(event)"><PhCaretDown :size="18" aria-hidden="true" /></button>
+                  <button class="icon-btn" type="button" :aria-label="`导出 ${event.title}`" @click="emit('export', event)"><PhExport :size="18" aria-hidden="true" /></button>
                   <button class="icon-btn" type="button" :aria-label="`编辑 ${event.title}`" @click="emit('edit', event)"><PhPencilSimple :size="18" aria-hidden="true" /></button>
                   <button class="icon-btn" type="button" :aria-label="`删除 ${event.title}`" @click="emit('delete', event)"><PhTrash :size="18" aria-hidden="true" /></button>
                 </div>
