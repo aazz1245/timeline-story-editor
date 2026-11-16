@@ -140,6 +140,7 @@ try {
   await page.locator('#event-summary').fill('由浏览器验收创建');
   await page.locator('#event-people').fill('人物甲');
   await page.locator('.profile-disclosure').first().locator('summary').click();
+  assert.equal(await page.locator('#人物甲-bust').inputValue(), '90');
   assert.equal(await page.locator('.profile-disclosure').first().locator('output').textContent(), 'C');
   assert.equal(await page.locator('.profile-disclosure').first().locator('input[aria-label*="罩杯"]').count(), 0);
   await page.locator('.body-data-form input:not([type="checkbox"])').first().evaluate(element => { const input = element; input.value = '测试内衣'; input.dispatchEvent(new Event('input', { bubbles: true })); });

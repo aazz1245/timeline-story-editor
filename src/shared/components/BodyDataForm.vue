@@ -29,7 +29,7 @@ const calculatedCup = computed(() => props.basePerson ? calculateCup(props.baseP
       <div class="field"><label :for="`${personName}-cage`">特殊饰品/锁具</label><input :id="`${personName}-cage`" v-model="draft.cage" :disabled="draft.isNPC" /></div>
       <div class="field full"><label :for="`${personName}-accessories`">其他饰品</label><input :id="`${personName}-accessories`" v-model="accessories" placeholder="用逗号分隔" :disabled="draft.isNPC" /></div>
       <div class="field"><label :for="`${personName}-bust`">胸围 (cm)</label><input :id="`${personName}-bust`" v-model.number="draft.bustSize" type="number" min="0" max="200" :disabled="draft.isNPC" /></div>
-      <div class="field"><label :for="`${personName}-cup`">罩杯（自动）</label><output :id="`${personName}-cup`" class="readonly-output">{{ calculatedCup }}</output></div>
+      <div class="field"><label :for="`${personName}-cup`">罩杯（基础档案自动计算）</label><output :id="`${personName}-cup`" class="readonly-output">{{ calculatedCup }}</output></div>
       <div class="field"><label :for="`${personName}-state`">状态</label><select :id="`${personName}-state`" v-model="draft.penisState" :disabled="draft.isNPC"><option>未勃起</option><option>勃起</option></select></div>
       <div class="field"><label :for="`${personName}-length`">尺寸 (cm)</label><input :id="`${personName}-length`" v-model.number="draft.penisLength" type="number" min="0" max="50" step="0.5" :disabled="draft.isNPC" /></div>
     </div>

@@ -18,13 +18,21 @@ function profileFor(name: string) {
   return form.peopleData[name];
 }
 function basePersonFor(name: string) { return props.mainCharacters.find(person => person.name === name); }
+function syncBaseMeasurements(name: string) {
+  const profile = profileFor(name);
+  const basePerson = basePersonFor(name);
+  if (!basePerson) return;
+  profile.bustSize = Number(basePerson.upperBust ?? profile.bustSize);
+  profile.cup = calculateCup(basePerson.upperBust, basePerson.lowerBust);
+}
 watch(() => props.event, event => {
   Object.assign(form, event ? JSON.parse(JSON.stringify(event)) : { id: crypto.randomUUID(), title: '', date: new Date().toISOString().slice(0, 10).replaceAll('-', '/'), time: '上午', location: '', summary: '', content: '', people: [], peopleData: {}, order: 0, branchId: null });
   peopleInput.value = (event?.people || []).join(', ');
   newBranchName.value = '';
   branchParent.value = '';
 }, { immediate: true });
-watch(peopleNames, names => names.forEach(profileFor), { immediate: true });
+watch(peopleNames, names => names.forEach(syncBaseMeasurements), { immediate: true });
+watch(() => props.mainCharacters, () => peopleNames.value.forEach(syncBaseMeasurements), { deep: true });
 function submit() {
   let branch: TimelineBranch | undefined;
   let branchId = form.branchId;
