@@ -19,6 +19,8 @@ Windows 桌面快捷方式会启动生产服务并自动打开 `http://127.0.0.1
 
 快捷方式图标由 `scripts/update-shortcut-icon.ps1` 生成和更新；默认读取桌面上的图标源图，运行 `npm run shortcut:icon` 即可重新应用。
 
+Windows 安装包解压后运行 `scripts/install-timeline.ps1`，或在 PowerShell 中执行 `npm run install:windows`。脚本会安装依赖、构建应用并创建桌面快捷方式；需要 Node.js 18+ 和 PowerShell 7。
+
 在应用的“本机设置”中可以修改默认档案目录。服务会把现有档案复制到新目录，之后按 `故事名_存档时间.json` 保存；应用会在故事变更后自动保存，也可按 `Ctrl+S` 立即保存当前故事。
 
 ## 构建与运行

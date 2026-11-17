@@ -7,7 +7,8 @@ import type { CompendiumItem, StoryArchive, StorySummary } from '../src/shared/t
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const settingsPath = path.join(root, '.timeline-settings.json');
-let dataRoot = path.resolve(process.env.TIMELINE_DATA_DIR || path.join(root, 'data'));
+const defaultDataRoot = path.resolve(path.join(root, 'data'));
+let dataRoot = path.resolve(process.env.TIMELINE_DATA_DIR || defaultDataRoot);
 let storiesRoot = path.join(dataRoot, 'stories');
 let compendiumPath = path.join(dataRoot, 'compendium.json');
 const port = Number(process.env.PORT || 4174);
@@ -15,7 +16,13 @@ const port = Number(process.env.PORT || 4174);
 if (!process.env.TIMELINE_DATA_DIR) {
   try {
     const configured = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
-    if (typeof configured?.dataDirectory === 'string' && path.isAbsolute(configured.dataDirectory)) dataRoot = path.resolve(configured.dataDirectory);
+    if (typeof configured?.dataDirectory === 'string' && path.isAbsolute(configured.dataDirectory)) {
+      const configuredRoot = path.resolve(configured.dataDirectory);
+      try {
+        const stats = await fs.stat(configuredRoot);
+        if (stats.isDirectory()) dataRoot = configuredRoot;
+      } catch { /* stale local settings fall back to the project data folder */ }
+    }
   } catch { /* use the repository data folder */ }
   storiesRoot = path.join(dataRoot, 'stories');
   compendiumPath = path.join(dataRoot, 'compendium.json');
@@ -100,7 +107,7 @@ async function readCompendium(): Promise<CompendiumItem[]> {
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, dataDirectory: dataRoot }));
 app.get('/api/settings', (_req, res) => res.json({ dataDirectory: dataRoot }));
 app.put('/api/settings', async (req, res, next) => {
   try {
