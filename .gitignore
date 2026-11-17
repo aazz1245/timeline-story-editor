@@ -22,3 +22,6 @@ SKILL.md
 .local-backup/
 故事时间线.lnk
 .timeline-settings.json
+
+# Generated locally from the user's shortcut artwork; do not publish.
+assets/story-timeline.ico

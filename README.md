@@ -17,6 +17,8 @@ npm run dev
 
 Windows 桌面快捷方式会启动生产服务并自动打开 `http://127.0.0.1:4174`。快捷方式调用 `scripts/start-timeline.ps1`；也可以直接运行 `npm start`。
 
+快捷方式图标由 `scripts/update-shortcut-icon.ps1` 生成和更新；默认读取桌面上的图标源图，运行 `npm run shortcut:icon` 即可重新应用。
+
 在应用的“本机设置”中可以修改默认档案目录。服务会把现有档案复制到新目录，之后按 `故事名_存档时间.json` 保存；应用会在故事变更后自动保存，也可按 `Ctrl+S` 立即保存当前故事。
 
 ## 构建与运行

@@ -9,6 +9,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "prestart": "npm run migrate:data",
     "start": "tsx server/index.ts",
+    "shortcut:icon": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/update-shortcut-icon.ps1",
     "test": "vitest run",
     "test:e2e": "npm run build && node tests/e2e/run.mjs",
     "migrate:data": "tsx scripts/migrate-legacy-data.ts",
