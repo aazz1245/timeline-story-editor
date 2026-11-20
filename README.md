@@ -6,6 +6,8 @@
 
 Markdown 导入格式见 [`docs/story-format.md`](docs/story-format.md) 与 [`docs/branch-format.md`](docs/branch-format.md)。
 
+项目结构、数据流、时间线折叠和本机运行边界见 [`docs/architecture.md`](docs/architecture.md)。
+
 ## 开发
 
 ```powershell
