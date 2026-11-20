@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMarkdown } from '../../src/shared/domain/markdown';
+import { parseMarkdown, renderEventMarkdown, renderStoryMarkdown } from '../../src/shared/domain/markdown';
 import { createEmptyStory } from '../../src/shared/domain/normalize';
 
 describe('markdown importer', () => {
@@ -25,5 +25,36 @@ describe('markdown importer', () => {
     expect(profile.bustSize).toBe(92);
     expect(profile.cup).toBe('C');
     expect(profile.penisLength).toBe(12);
+  });
+
+  it('exports branch structure and event character profiles', () => {
+    const story = parseMarkdown(`### 2030/03/20 上午 - 主线事件
+**人物**: 甲
+
+主线正文
+
+## 结局分支: 北线 (分歧点: 主线事件)
+
+### 2030/03/21 下午 - 分支事件
+**人物**: 甲
+
+分支正文
+
+#### 人物档案
+
+##### 甲
+- **内衣款式**: 黑色
+- **胸围**: 92cm`, createEmptyStory('测试')).story;
+
+    const storyMarkdown = renderStoryMarkdown(story);
+    const branchEvent = story.events.find(event => event.title === '分支事件')!;
+    const eventMarkdown = renderEventMarkdown(branchEvent, story.branches, true);
+
+    expect(storyMarkdown).toContain('## 结局分支: 北线 (分歧点: 主线事件)');
+    expect(storyMarkdown).toContain('##### 甲');
+    expect(storyMarkdown).toContain('- **内衣款式**: 黑色');
+    expect(eventMarkdown).toContain('**线路**: 北线');
+    expect(eventMarkdown).toContain('**地点**:');
+    expect(eventMarkdown).toContain('**人物**: 甲');
   });
 });

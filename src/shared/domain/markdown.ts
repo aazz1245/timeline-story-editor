@@ -5,6 +5,61 @@ const eventHeading = /^###\s+(\d{4}[/-]\d{1,2}[/-]\d{1,2})(?:\s+(.+?))?\s+-\s*(.
 const branchHeading = /^##\s+结局分支\s*[:：]\s*(.*?)(?:\s*[(（]分歧点\s*[:：]\s*(.*?)[)）])?\s*$/;
 const timeSlots = new Set(['凌晨', '清晨', '上午', '中午', '下午', '黄昏', '晚上', '深夜']);
 
+export function renderPeopleProfiles(event: TimelineEvent) {
+  const profiles = event.people.map(name => {
+    const profile = event.peopleData[name];
+    if (!profile) return '';
+    const accessories = profile.specialAccessories.map(item => item.type).join(', ') || '无';
+    return [
+      `##### ${name}`,
+      profile.isNPC ? '- **身份**: NPC' : '',
+      `- **内衣款式**: ${profile.underwear}`,
+      `- **上衣**: ${profile.top}`,
+      `- **下装**: ${profile.bottom}`,
+      `- **袜饰**: ${profile.socks}`,
+      `- **鞋履**: ${profile.shoes}`,
+      `- **笼具**: ${profile.cage}`,
+      `- **特殊饰品**: ${accessories}`,
+      `- **胸围**: ${profile.bustSize}cm`,
+      `- **罩杯**: ${profile.cup}`,
+      `- **状态**: ${profile.penisState}`,
+      `- **尺寸**: ${profile.penisLength}cm`,
+    ].filter(Boolean).join('\n');
+  }).filter(Boolean);
+  return profiles.length ? ['#### 人物档案', ...profiles].join('\n\n') : '';
+}
+
+export function renderEventMarkdown(event: TimelineEvent, branches: TimelineBranch[], includeEmptyFields = false) {
+  const branchName = event.branchId ? branches.find(branch => branch.id === event.branchId)?.name || '未知分支' : '主线';
+  const location = includeEmptyFields || event.location ? `**地点**: ${event.location}` : '';
+  const people = includeEmptyFields || event.people.length ? `**人物**: ${event.people.join(', ')}` : '';
+  return [
+    `### ${event.date} ${event.time} - ${event.title}`,
+    `**线路**: ${branchName}`,
+    location,
+    people,
+    '',
+    event.summary ? `> ${event.summary}` : '',
+    '',
+    event.content,
+    '',
+    renderPeopleProfiles(event),
+    '',
+    '---',
+    '',
+  ].join('\n');
+}
+
+export function renderStoryMarkdown(story: StoryArchive) {
+  const renderEvent = (event: TimelineEvent) => renderEventMarkdown(event, story.branches);
+  const sections = [story.events.filter(event => !event.branchId).map(renderEvent).join('\n')];
+  for (const branch of story.branches) {
+    const parent = story.events.find(event => String(event.id) === String(branch.parentEventId));
+    sections.push(`## 结局分支: ${branch.name}${parent ? ` (分歧点: ${parent.title})` : ''}\n\n${story.events.filter(event => event.branchId === branch.id).map(renderEvent).join('\n')}`);
+  }
+  return sections.join('\n');
+}
+
 export function parseMarkdown(markdown: string, original: StoryArchive): MarkdownImportResult {
   const story = normalizeStory(original);
   const warnings: string[] = [];

@@ -51,7 +51,9 @@ src/
   main.ts                         Vue 应用入口
   App.vue                         全局状态与工作流编排
   features/
-    stories/StorySidebar.vue      故事列表、选择、新建、重命名、删除、侧栏折叠
+    stories/
+      StorySidebar.vue            故事列表、选择、新建、重命名、删除、侧栏折叠
+      useStoryArchive.ts          故事加载、保存和列表状态
     events/EventModal.vue         事件编辑、人物档案、线路/分支关联
     timeline/
       TimelineBoard.vue           阶段-月份-事件时间线
@@ -62,8 +64,11 @@ src/
   shared/
     types.ts                      故事、事件、人物和图鉴类型
     api.ts                        浏览器到本机服务的 API 封装
+    composables/
+      useAutoSave.ts              防抖自动保存与串行保存队列
     domain/normalize.ts           默认值、旧数据兼容、罩杯计算
-    domain/markdown.ts             Markdown 导入解析
+    domain/timeline.ts            分支层级计算
+    domain/markdown.ts             Markdown 导入解析与导出序列化
     components/                   弹窗、身体数据表单、本机设置
   styles/                         设计令牌与应用样式
 server/index.ts                   本机 API 与生产静态服务
@@ -101,7 +106,7 @@ App.vue
 └─ ModalShell
 ```
 
-所有保存操作最终回到 `App.vue` 的 `save`。子组件只产生完整的 `StoryArchive`、`TimelineEvent` 或图鉴数组，避免同一数据在多个组件中各自持久化。
+故事、事件、人物和阶段保存最终由 `App.vue` 调用 `useStoryArchive` 的保存入口。图鉴使用独立的图鉴 API。子组件通过事件回传用户操作或编辑数据，由工作区集中协调持久化，避免组件各自访问文件系统。
 
 ## 5. 核心数据结构
 
@@ -132,9 +137,10 @@ interface StoryArchive {
 1. `App.vue` 挂载后读取 `/api/settings`、`/api/stories` 和 `/api/compendium`。
 2. 选择故事后调用 `/api/stories/:id`，服务端读取 JSON 并通过 `normalizeStory` 补全旧字段和默认值。
 3. 编辑事件、人物或阶段时，子组件向上 emit，`App.vue` 生成新的故事对象。
-4. 深度 watch 发现故事快照变化后启动 700ms 防抖自动保存。
-5. 自动保存和 `Ctrl+S` 都调用 `save`，由 API 更新当前故事并刷新已保存快照。
-6. 保存失败时保留当前编辑状态，并在顶部显示失败状态，下一次编辑仍可触发重试。
+4. `useAutoSave` 的深度 watch 发现故事快照变化后启动 700ms 防抖自动保存。
+5. 自动保存和 `Ctrl+S` 都进入串行保存队列。保存请求进行中产生的新编辑会排在当前请求之后。
+6. 保存响应只有在对应请求仍代表当前编辑时才回写故事对象。旧响应不会覆盖更新中的本地编辑。
+7. 保存失败时保留当前编辑状态，并在顶部显示失败状态，下一次编辑或 `Ctrl+S` 仍可触发重试。
 
 服务端更新故事时把文件命名为 `故事名_存档时间.json`。更新故事名称或保存时间改变文件名时，会删除同一 `storyId` 的旧文件。迁移脚本使用稳定 `storyId` 文件名写入目标目录，以便迁移去重。服务端读取时始终以 JSON 内的 `storyId` 作为身份。
 
@@ -146,7 +152,7 @@ interface StoryArchive {
 
 阶段标题始终是事件容器的一级标题。阶段折叠时显示阶段摘要和线路统计，展开时显示其月份和事件。应用加载时只展开最新事件所属阶段，其他阶段折叠。月份也默认只展开最新事件所属月份。
 
-分支事件按照父线路关系计算缩进。事件卡通过 CSS 变量设置缩进距离，因此主线、一级分支和更深层分支在视觉上保持父子层级。事件卡展开内容使用 Vue transition 从上到下展开，背景使用半透明表面，避免覆盖主线阅读。
+分支事件通过父事件所属线路递归计算缩进。事件卡通过 CSS 变量设置缩进距离，因此主线、一级分支和更深层分支在视觉上保持父子层级。月份内容使用 Vue transition 从上到下展开，事件详情以半透明悬浮层显示，避免覆盖主线阅读。
 
 ### 时间流视图
 
@@ -217,7 +223,7 @@ npm run build        # vue-tsc 类型检查和 Vite 构建
 npm run test:e2e     # 构建后启动本机服务并运行 Playwright 验收
 ```
 
-单元测试覆盖归一化、旧版罩杯算法、Markdown 事件/分支/人物档案往返、CLI 导入和迁移幂等性。E2E 测试覆盖事件编辑、同日事件顺序、阶段和月份折叠、人物数据、图鉴、自动保存、快捷键和窄屏工作区。
+单元测试覆盖归一化、旧版罩杯算法、Markdown 事件/分支/人物档案导入导出、CLI 导入、迁移幂等性、嵌套分支层级和保存队列竞态。E2E 测试覆盖事件编辑、同日事件顺序、阶段和月份折叠、人物数据、图鉴、自动保存、快捷键和窄屏工作区。
 
 ## 13. Git 数据边界
 

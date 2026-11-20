@@ -2,27 +2,14 @@
 import { PhCaretDown, PhCaretRight, PhExport, PhGitBranch, PhMapPin, PhPencilSimple, PhTrash } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import type { StoryPeriod, TimelineBranch, TimelineEvent } from '../../shared/types';
+import { calculateBranchDepths } from '../../shared/domain/timeline';
 
 const props = defineProps<{ events: TimelineEvent[]; branches: TimelineBranch[]; stages: StoryPeriod[]; collapsedMonths: Set<string>; collapsedStages: Set<string>; query: string }>();
 const emit = defineEmits<{ edit: [event: TimelineEvent]; delete: [event: TimelineEvent]; export: [event: TimelineEvent]; toggleMonth: [month: string]; toggleStage: [stageId: string]; select: [event: TimelineEvent] }>();
 const expandedEvents = ref(new Set<string>());
 
 const branchMap = computed(() => new Map(props.branches.map(branch => [branch.id, branch.name])));
-const branchDepth = computed(() => {
-  const depths = new Map<string, number>();
-  const resolve = (id: string, seen = new Set<string>()): number => {
-    if (depths.has(id)) return depths.get(id)!;
-    if (seen.has(id)) return 1;
-    seen.add(id);
-    const branch = props.branches.find(item => item.id === id);
-    const parent = branch?.parentEventId == null ? 0 : 1;
-    const depth = parent + (branch?.parentEventId != null ? 0 : 0);
-    depths.set(id, depth);
-    return depth;
-  };
-  props.branches.forEach(branch => resolve(branch.id));
-  return depths;
-});
+const branchDepth = computed(() => calculateBranchDepths(props.branches, props.events));
 const stageCounts = computed(() => new Map(props.stages.map(stage => [stage.id, props.events.filter(event => inStage(event, stage)).length])));
 const inStage = (event: TimelineEvent, stage: StoryPeriod) => event.date >= stage.startDate && event.date <= stage.endDate;
 const stageBreakdown = (stage: StoryPeriod) => props.branches.map(branch => ({ branch, count: props.events.filter(event => inStage(event, stage) && event.branchId === branch.id).length })).filter(item => item.count);
